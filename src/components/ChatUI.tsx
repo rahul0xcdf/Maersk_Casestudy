@@ -7,12 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, Send, MessageCircle, Database } from 'lucide-react'
 import { toast } from 'sonner'
+import { QueryResult } from '@/components/QueryResult'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
   cached?: boolean
+  queryResult?: {
+    sql: string
+    explanation: string
+    data: any[]
+    columns: string[]
+    visualizationType: 'table' | 'bar' | 'line' | 'pie' | 'map' | 'metric'
+    executionTime?: number
+    cached?: boolean
+  }
 }
 
 interface ChatUIProps {
@@ -23,7 +33,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [includeData, setIncludeData] = useState(false)
+  const [queryMode, setQueryMode] = useState(true) // Toggle between chat and query mode
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,43 +54,99 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/chat', {
+      // Use query API for analytics questions, chat API for general questions
+      const endpoint = queryMode ? '/api/query' : '/api/chat'
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           question: input,
-          includeData
         }),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to get response')
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to get response')
       }
 
       const data = await response.json()
       
-      const assistantMessage: ChatMessage = {
-        role: 'assistant',
-        content: data.response.text,
-        timestamp: new Date(),
-        cached: data.cached
+      if (queryMode) {
+        // Analytics Mode - check if it's conversational or has data
+        if (data.isConversational || (!data.data || data.data.length === 0)) {
+          // Conversational response (no SQL/data)
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: data.explanation || data.message || 'No response',
+            timestamp: new Date(),
+            cached: data.cached
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          
+          if (data.cached) {
+            toast.success('Response loaded from cache')
+          }
+        } else if (data.data !== undefined) {
+          // Query response with data visualization
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: data.explanation || 'Here are the results:',
+            timestamp: new Date(),
+            cached: data.cached,
+            queryResult: {
+              sql: data.sql,
+              explanation: data.explanation,
+              data: data.data,
+              columns: data.columns,
+              visualizationType: data.visualizationType,
+              executionTime: data.executionTime,
+              cached: data.cached
+            }
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          
+          if (data.cached) {
+            toast.success('Results loaded from cache')
+          } else {
+            toast.success(`Query executed in ${data.executionTime}ms`)
+          }
+        }
+      } else {
+        // Chat response
+        if (data.error) {
+          // Show error message
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Error: ${data.message || data.error}\n\n${data.hint ? `Hint: ${data.hint}` : ''}`,
+            timestamp: new Date()
+          }
+          setMessages(prev => [...prev, errorMessage])
+          toast.error(data.message || data.error)
+        } else {
+          const assistantMessage: ChatMessage = {
+            role: 'assistant',
+            content: data.response?.text || data.message || 'No response',
+            timestamp: new Date(),
+            cached: data.cached
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          
+          if (data.cached) {
+            toast.success('Response loaded from cache')
+          }
+        }
       }
-
-      setMessages(prev => [...prev, assistantMessage])
-      
-      if (data.cached) {
-        toast.success('Response loaded from cache')
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error)
-      toast.error('Failed to get response. Please try again.')
+      toast.error(error.message || 'Failed to get response. Please try again.')
       
       // Add error message
       const errorMessage: ChatMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error while processing your request. Please try again.',
+        content: `Sorry, I encountered an error: ${error.message}. Please try rephrasing your question.`,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -105,42 +171,50 @@ export function ChatUI({ className = '' }: ChatUIProps) {
         </CardTitle>
         <div className="flex items-center gap-2">
           <Button
-            variant={includeData ? "default" : "outline"}
+            variant={queryMode ? "default" : "outline"}
             size="sm"
-            onClick={() => setIncludeData(!includeData)}
+            onClick={() => setQueryMode(true)}
             className="text-xs"
           >
             <Database className="h-3 w-3 mr-1" />
-            Include Data
+            Analytics Mode
           </Button>
-          {includeData && (
-            <Badge variant="secondary" className="text-xs">
-              Will use dataset context
-            </Badge>
-          )}
+          <Button
+            variant={!queryMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setQueryMode(false)}
+            className="text-xs"
+          >
+            <MessageCircle className="h-3 w-3 mr-1" />
+            Chat Mode
+          </Button>
         </div>
       </CardHeader>
       
       <CardContent className="flex-1 flex flex-col gap-4 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto space-y-4 min-h-0 max-h-96">
+        <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-8">
               <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-sm">Ask me anything about the Brazilian E-Commerce dataset!</p>
-              <p className="text-xs mt-2">Try questions like "What are the most popular product categories?" or "What's the average order value?"</p>
+              <p className="text-xs mt-2">
+                {queryMode 
+                  ? 'Try analytics questions like "Which product category sold the most in Q4 2018?" or "Show average delivery time by state"'
+                  : 'Try general questions about the dataset or ask for help with analytics queries'}
+              </p>
             </div>
           ) : (
             messages.map((message, index) => (
               <div
                 key={index}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg p-3 ${
+                  className={`rounded-lg p-3 ${
                     message.role === 'user'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted'
+                      ? 'bg-primary text-primary-foreground max-w-[80%]'
+                      : 'bg-muted w-full'
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -153,11 +227,18 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                  <p className="text-xs opacity-70 mt-1">
+                  {message.content && (
+                    <p className="text-sm whitespace-pre-wrap mb-2">{message.content}</p>
+                  )}
+                  <p className="text-xs opacity-70">
                     {message.timestamp.toLocaleTimeString()}
                   </p>
                 </div>
+                {message.queryResult && (
+                  <div className="w-full mt-2">
+                    <QueryResult {...message.queryResult} />
+                  </div>
+                )}
               </div>
             ))
           )}
