@@ -1,0 +1,47 @@
+[33m[nodemon] 3.1.10[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): server.ts src/**/*[39m
+[33m[nodemon] watching extensions: ts,tsx,js,jsx[39m
+[32m[nodemon] starting `npx tsx server.ts`[39m
+> Ready on http://0.0.0.0:3000
+> Socket.IO server running at ws://0.0.0.0:3000/api/socketio
+ ○ Compiling / ...
+ ✓ Compiled / in 4.4s (1883 modules)
+ GET / 200 in 4791ms
+ ⚠ Cross origin request detected from 0.0.0.0 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 689ms (974 modules)
+ GET /favicon.ico 200 in 778ms
+ ○ Compiling /api/chat ...
+ ✓ Compiled /api/chat in 840ms (2094 modules)
+ ⨯ Error [IllegalArgumentError]: [VertexAI.IllegalArgumentError]: Unable to infer your project.Please provide a project Id by one of the following:
+- Passing a constructor argument by using new VertexAI({project: my-project})
+- Setting project using `gcloud config set project my-project`
+    at eval (src/lib/gemini.ts:4:17)
+    at <unknown> (rsc)/./src/lib/gemini.ts (/Users/rahul0/Workspace/Maersk/.next/server/app/api/chat/route.js:54:1)
+    at __webpack_require__ (.next/server/webpack-runtime.js:33:43)
+    at eval (webpack-internal:///(rsc)/./src/app/api/chat/route.ts:6:69)
+    at <unknown> (rsc)/./src/app/api/chat/route.ts (/Users/rahul0/Workspace/Maersk/.next/server/app/api/chat/route.js:43:1)
+    at __webpack_require__ (.next/server/webpack-runtime.js:33:43)
+    at __webpack_require__ (.next/server/webpack-runtime.js:33:43)
+    at __webpack_exec__ (.next/server/app/api/chat/route.js:404:39)
+    at <unknown> (.next/server/app/api/chat/route.js:405:906)
+    at __webpack_require__.X (.next/server/webpack-runtime.js:168:21)
+    at <unknown> (.next/server/app/api/chat/route.js:405:47)
+    at Object.<anonymous> (.next/server/app/api/chat/route.js:408:3)
+  2 |
+  3 | // Initialize Vertex AI
+> 4 | const vertexAI = new VertexAI({
+    |                 ^
+  5 |   project: process.env.GOOGLE_PROJECT_ID!,
+  6 |   location: 'us-central1', // You can change this based on your requirements
+  7 | }); {
+  stackTrace: undefined,
+  page: '/api/chat'
+}
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 738ms (2428 modules)
+ GET / 200 in 405ms
+ GET / 200 in 18ms
+ POST /api/chat 500 in 2188ms
