@@ -6,6 +6,7 @@ import crypto from 'crypto'
 
 export interface QueryResponse {
   sql: string
+  //lol
   explanation: string
   data: any[]
   columns: string[]
