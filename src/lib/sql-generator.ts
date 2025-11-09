@@ -185,8 +185,26 @@ export async function generateSQLFromQuestion(
     // Check if this is a greeting or non-analytics question
     const lowerQuestion = question.toLowerCase().trim()
     const isGreeting = /^(hi|hello|hey|greetings|good morning|good afternoon|good evening|howdy)$/i.test(lowerQuestion)
+    
+    // Data-related keywords that indicate this is a data query
+    const dataKeywords = [
+      'rows', 'row', 'count', 'number', 'how many', 'how much', 'total', 'sum', 'average', 'avg',
+      'max', 'min', 'table', 'data', 'query', 'select', 'show', 'list', 'find', 'get',
+      'sales', 'revenue', 'orders', 'products', 'customers', 'sellers', 'payments', 'delivery',
+      'category', 'categories', 'state', 'month', 'year', 'quarter', 'geolocation', 'olist_',
+      'customer', 'seller', 'order', 'payment', 'review', 'product'
+    ]
+    
+    // Check if question contains data-related keywords
+    const hasDataKeywords = dataKeywords.some(keyword => lowerQuestion.includes(keyword))
+    
+    // Check if question is asking for specific data (numbers, counts, aggregations)
+    const isAskingForData = /(how many|how much|count|number of|total|sum|average|rows? in|records? in)/i.test(question)
+    
+    // Only treat as general question if it doesn't have data keywords and isn't asking for data
     const isGeneralQuestion = /^(what|who|when|where|why|how|explain|tell me|help|can you|what is|what are)/i.test(lowerQuestion) && 
-      !/(sales|revenue|orders|products|customers|sellers|payments|delivery|category|categories|state|month|year|quarter|average|total|count|sum|max|min)/i.test(question)
+      !hasDataKeywords && 
+      !isAskingForData
     
     if (isGreeting || isGeneralQuestion) {
       // Return a conversational response instead of SQL

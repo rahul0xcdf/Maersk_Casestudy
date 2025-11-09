@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateChatResponse, generateChatCacheKey } from '@/lib/gemini';
 import { getCachedData, setCachedData } from '@/lib/redis';
 import { supabase } from '@/lib/supabase';
+import crypto from 'crypto';
+
+// Generate cache key from question (same as query API)
+function generateQueryCacheKey(question: string): string {
+  const hash = crypto.createHash('sha256').update(question.toLowerCase().trim()).digest('hex')
+  return `query:${hash}`
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,13 +21,124 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate cache key
-    const cacheKey = generateChatCacheKey(question, includeData ? 'with-data' : undefined);
-
-    // Check cache first (but skip for greetings to avoid stale mock responses)
+    // Check if this is a greeting - skip cache for greetings to avoid stale responses
     const isGreeting = /^(hi|hello|hey|greetings|good morning|good afternoon|good evening|howdy)$/i.test(question.trim())
     
+    // Generate cache key for chat responses
+    const cacheKey = generateChatCacheKey(question, includeData ? 'with-data' : undefined);
+    
     if (!isGreeting) {
+      // First, check if there's a cached query result (from Analytics Mode)
+      const queryCacheKey = generateQueryCacheKey(question);
+      const cachedQueryResponse = await getCachedData<any>(queryCacheKey);
+      
+      if (cachedQueryResponse && cachedQueryResponse.data !== undefined) {
+        // Convert query response to human-friendly chat format
+        let responseText = '';
+        
+        // Start with a natural explanation if available
+        if (cachedQueryResponse.explanation) {
+          responseText = cachedQueryResponse.explanation;
+        }
+        
+        if (cachedQueryResponse.data && cachedQueryResponse.data.length > 0) {
+          // Format metrics in a natural, conversational way
+          if (cachedQueryResponse.visualizationType === 'metric' && cachedQueryResponse.data.length === 1) {
+            const metric = cachedQueryResponse.data[0];
+            const value = Object.values(metric)[0];
+            const label = Object.keys(metric)[0];
+            
+            // Format numbers with commas for readability
+            const formattedValue = typeof value === 'number' 
+              ? value.toLocaleString() 
+              : value;
+            
+            // Create a natural sentence
+            if (!responseText || responseText.trim() === '') {
+              // If no explanation, create one from the metric
+              const labelLower = label.toLowerCase();
+              if (labelLower.includes('count') || labelLower.includes('total')) {
+                responseText = `There are **${formattedValue}** ${labelLower.replace(/^(total|count of|number of)\s*/i, '').replace(/\s+/g, ' ')} in the dataset.`;
+              } else {
+                responseText = `The **${label}** is **${formattedValue}**.`;
+              }
+            } else {
+              // If explanation mentions counting/rows/products, create a natural summary
+              const explanationLower = responseText.toLowerCase();
+              if (explanationLower.includes('count') && explanationLower.includes('product')) {
+                responseText = `There are **${formattedValue}** products in the dataset.`;
+              } else if (explanationLower.includes('count') && explanationLower.includes('row')) {
+                // Extract what is being counted from the explanation
+                const match = explanationLower.match(/counts?\s+(?:the\s+)?(?:total\s+)?(?:number\s+of\s+)?(?:rows?\s+in\s+the\s+)?['"]?(\w+)/);
+                if (match && match[1]) {
+                  const entity = match[1].replace(/^olist_/, '');
+                  responseText = `There are **${formattedValue}** ${entity} in the dataset.`;
+                } else {
+                  responseText = `There are **${formattedValue}** items in the dataset.`;
+                }
+              } else {
+                // Append the metric value naturally
+                responseText += `\n\nThe result is **${formattedValue}**.`;
+              }
+            }
+          } else if (cachedQueryResponse.data.length === 1) {
+            // Single row result - format it naturally
+            const row = cachedQueryResponse.data[0];
+            const keys = Object.keys(row);
+            
+            if (keys.length === 1) {
+              const key = keys[0];
+              const value = row[key];
+              const formattedValue = typeof value === 'number' 
+                ? value.toLocaleString() 
+                : value;
+              
+              if (!responseText || responseText.trim() === '') {
+                responseText = `The **${key}** is **${formattedValue}**.`;
+              } else {
+                responseText += `\n\nThe result is **${formattedValue}**.`;
+              }
+            } else {
+              // Multiple columns - format as a summary
+              if (!responseText || responseText.trim() === '') {
+                responseText = 'Here are the results:';
+              }
+              responseText += '\n\n' + JSON.stringify(row, null, 2);
+            }
+          } else {
+            // Multiple rows - provide a summary
+            const rowCount = cachedQueryResponse.data.length;
+            const formattedCount = rowCount.toLocaleString();
+            
+            if (!responseText || responseText.trim() === '') {
+              responseText = `Found **${formattedCount}** result${rowCount === 1 ? '' : 's'}.`;
+            } else {
+              responseText += `\n\nFound **${formattedCount}** result${rowCount === 1 ? '' : 's'}.`;
+            }
+            
+            // Show a few sample rows if there aren't too many
+            if (rowCount <= 5) {
+              responseText += '\n\n' + JSON.stringify(cachedQueryResponse.data, null, 2);
+            } else {
+              responseText += `\n\nHere are the first few results:\n\n` + JSON.stringify(cachedQueryResponse.data.slice(0, 3), null, 2);
+            }
+          }
+        } else {
+          // No data found
+          if (!responseText || responseText.trim() === '') {
+            responseText = 'No results found for your query.';
+          } else {
+            responseText += '\n\nNo matching data was found.';
+          }
+        }
+        
+        return NextResponse.json({
+          response: { text: responseText },
+          cached: true
+        });
+      }
+      
+      // Then check chat cache
       const cachedResponse = await getCachedData(cacheKey);
       if (cachedResponse) {
         return NextResponse.json({
