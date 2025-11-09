@@ -1,1 +1,0 @@
-globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/query/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/Users/rahul0/Workspace/Maersk/src/":[],"/Users/rahul0/Workspace/Maersk/src/app/api/query/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}

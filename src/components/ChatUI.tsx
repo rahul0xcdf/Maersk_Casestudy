@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Send, MessageCircle, Database } from 'lucide-react'
+import { Loader2, Send, MessageCircle, Database, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { QueryResult } from '@/components/QueryResult'
 
@@ -29,11 +29,92 @@ interface ChatUIProps {
   className?: string
 }
 
+const STORAGE_KEY = 'chat-history'
+
+// Helper function to check if localStorage is available
+function isLocalStorageAvailable(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const test = '__localStorage_test__'
+    localStorage.setItem(test, test)
+    localStorage.removeItem(test)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Helper function to save messages to localStorage
+function saveMessagesToStorage(messages: ChatMessage[]): void {
+  if (!isLocalStorageAvailable()) return
+  
+  try {
+    const serialized = messages.map(msg => ({
+      ...msg,
+      timestamp: msg.timestamp.toISOString()
+    }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized))
+  } catch (error) {
+    console.error('Failed to save chat history to localStorage:', error)
+    // localStorage might be full or disabled - fail silently
+  }
+}
+
+// Helper function to load messages from localStorage
+function loadMessagesFromStorage(): ChatMessage[] {
+  if (!isLocalStorageAvailable()) return []
+  
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) return []
+    
+    const parsed = JSON.parse(stored)
+    return parsed.map((msg: any) => ({
+      ...msg,
+      timestamp: new Date(msg.timestamp)
+    }))
+  } catch (error) {
+    console.error('Failed to load chat history from localStorage:', error)
+    return []
+  }
+}
+
 export function ChatUI({ className = '' }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [queryMode, setQueryMode] = useState(true) // Toggle between chat and query mode
+
+  // Load messages from localStorage on mount
+  useEffect(() => {
+    const savedMessages = loadMessagesFromStorage()
+    if (savedMessages.length > 0) {
+      setMessages(savedMessages)
+    }
+  }, [])
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveMessagesToStorage(messages)
+    }
+  }, [messages])
+
+  // Clear chat history
+  const clearChat = () => {
+    setMessages([])
+    if (isLocalStorageAvailable()) {
+      try {
+        localStorage.removeItem(STORAGE_KEY)
+        toast.success('Chat history cleared')
+      } catch (error) {
+        console.error('Failed to clear chat history from localStorage:', error)
+        toast.error('Failed to clear chat history')
+      }
+    } else {
+      toast.success('Chat history cleared')
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -165,11 +246,25 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   return (
     <Card className={`flex flex-col h-full ${className}`}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
-          AI Assistant
-        </CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            AI Assistant
+          </CardTitle>
+          {messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearChat}
+              className="text-xs"
+              title="Clear chat history"
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-2">
           <Button
             variant={queryMode ? "default" : "outline"}
             size="sm"

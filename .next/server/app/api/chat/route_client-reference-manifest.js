@@ -1,1 +1,0 @@
-globalThis.__RSC_MANIFEST=(globalThis.__RSC_MANIFEST||{});globalThis.__RSC_MANIFEST["/api/chat/route"]={"moduleLoading":{"prefix":"/_next/"},"ssrModuleMapping":{},"edgeSSRModuleMapping":{},"clientModules":{},"entryCSSFiles":{"/Users/rahul0/Workspace/Maersk/src/":[],"/Users/rahul0/Workspace/Maersk/src/app/api/chat/route":[]},"rscModuleMapping":{},"edgeRscModuleMapping":{}}
