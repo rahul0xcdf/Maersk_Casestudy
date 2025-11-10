@@ -304,8 +304,9 @@ export function isDataQuery(question: string): boolean {
     'chart', 'graph', 'visualization', 'visualize', 'pie chart', 'bar chart', 
     'line chart', 'table', 'data', 'show me', 'list', 'count', 'how many',
     'total', 'sum', 'average', 'percentage', 'percent', 'revenue', 'sales',
-    'orders', 'customers', 'products', 'sellers', 'top', 'bottom', 'highest',
-    'lowest', 'by', 'group by', 'aggregate', 'statistics', 'stats'
+    'orders', 'customers', 'products', 'product', 'category', 'categories',
+    'sellers', 'top', 'bottom', 'highest', 'lowest', 'by', 'group by',
+    'aggregate', 'statistics', 'stats', 'perform best', 'best performing'
   ]
   
   // Visualization-specific patterns
@@ -409,7 +410,28 @@ export function processAnalyticsResponse(
       const tableNames = extractTableNames(data.sql || '')
       const sqlSummary = generateShortSQLExplanation(data.sql || queryResult.sql)
 
+      // Build a small markdown table of top rows for immediate readability
+      const buildMarkdownPreview = (rows: any[], columns: string[], maxRows: number = 10): string => {
+        if (!rows || rows.length === 0 || !columns || columns.length === 0) return ''
+        const previewCols = columns.slice(0, Math.min(3, columns.length))
+        const header = `| ${previewCols.map(col => col.replace(/_/g, ' ')).join(' | ')} |`
+        const sep = `| ${previewCols.map(() => '---').join(' | ')} |`
+        const body = rows.slice(0, maxRows).map(row => {
+          return `| ${previewCols.map(col => {
+            const v = row[col]
+            return typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(v ?? '-')
+          }).join(' | ')} |`
+        }).join('\n')
+        return `${header}\n${sep}\n${body}`
+      }
+
       const sections: string[] = []
+
+      // Add a compact data preview first so users see numbers immediately
+      const preview = buildMarkdownPreview(queryResult.data, queryResult.columns, 10)
+      if (preview) {
+        sections.push(`**Top results**\n\n${preview}`)
+      }
 
       if (insights && insights.trim().length > 0) {
         sections.push(`**Insights**\n${insights}`)
@@ -537,10 +559,8 @@ export function processChatResponse(data: any): ChatMessage {
     return hasExplanatoryPattern || (hasNoData && lowerText.includes('query'))
   }
   
-  // If response is explanatory and not from cache, suggest using analytics mode
-  if (isExplanatoryResponse(responseContent) && !data.cached) {
-    responseContent += '\n\n💡 **Tip:** Switch to **Analytics Mode** for detailed queries and actual data results.'
-  }
+  // If response is explanatory and not from cache, avoid instructing navigation;
+  // keep the reply concise without mode-switch suggestions.
   
   return {
     role: 'assistant',

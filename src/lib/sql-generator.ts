@@ -250,7 +250,7 @@ IMPORTANT INSTRUCTIONS:
 3. Use proper JOINs when accessing multiple tables
 4. Use appropriate aggregate functions (COUNT, SUM, AVG, MAX, MIN) when needed
 5. Format dates properly using DATE_TRUNC(), EXTRACT(), or TO_CHAR() functions
-6. Limit results to a reasonable number (use LIMIT 100 for large result sets)
+6. If the user asks for "top N", use that exact N. Otherwise, avoid adding a LIMIT unless the result set would obviously be huge.
 7. Suggest the best visualization type: 'table', 'bar', 'line', 'pie', 'map', or 'metric'
 8. For simple queries (single COUNT, SUM, AVG, etc.), provide a BRIEF explanation (1 sentence max)
 9. For complex queries, provide a clear explanation of what the query does (2-3 sentences max)
