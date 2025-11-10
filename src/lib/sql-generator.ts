@@ -252,12 +252,14 @@ IMPORTANT INSTRUCTIONS:
 5. Format dates properly using DATE_TRUNC(), EXTRACT(), or TO_CHAR() functions
 6. Limit results to a reasonable number (use LIMIT 100 for large result sets)
 7. Suggest the best visualization type: 'table', 'bar', 'line', 'pie', 'map', or 'metric'
-8. Provide a clear, helpful explanation of what the query does
+8. For simple queries (single COUNT, SUM, AVG, etc.), provide a BRIEF explanation (1 sentence max)
+9. For complex queries, provide a clear explanation of what the query does (2-3 sentences max)
+10. Keep explanations concise and focused on what data is being retrieved
 
 Return your response in the following JSON format:
 {
   "sql": "SELECT ...",
-  "explanation": "This query...",
+  "explanation": "Brief explanation of the query",
   "visualizationType": "bar"
 }
 

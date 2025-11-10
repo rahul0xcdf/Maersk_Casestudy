@@ -1,33 +1,31 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Send, MessageCircle, Database, Trash2, X } from 'lucide-react'
+import { Loader2, Send, MessageCircle, Database, Trash2, X, BarChart3, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { QueryResult } from '@/components/QueryResult'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  cached?: boolean
-  queryResult?: {
-    sql: string
-    explanation: string
-    data: any[]
-    columns: string[]
-    visualizationType: 'table' | 'bar' | 'line' | 'pie' | 'map' | 'metric'
-    executionTime?: number
-    cached?: boolean
-  }
-}
+import {
+  extractTableNames,
+  isSimpleNumericQuery,
+  formatSimpleNumericResponse,
+  isDataQuery,
+  isVisualizationResponse,
+  isVisualizationAnalysisRequest,
+  generateVisualizationInsights,
+  processAnalyticsResponse,
+  processChatResponse,
+  createQueryResult,
+  type QueryResult as QueryResultType,
+  type ChatMessage
+} from '@/lib/chat-handlers'
 
 interface ChatUIProps {
   className?: string
@@ -83,19 +81,6 @@ function loadMessagesFromStorage(): ChatMessage[] {
   }
 }
 
-// Helper function to extract table names from SQL
-function extractTableNames(sql: string): string[] {
-  if (!sql) return []
-  // Match table names from FROM and JOIN clauses (handle aliases and schema prefixes)
-  const tablePattern = /(?:FROM|JOIN)\s+(?:[a-z_]+\.)?([a-z_]+)(?:\s+[a-z]+)?/gi
-  const matches = [...sql.matchAll(tablePattern)]
-  const tables = matches
-    .map(m => m[1])
-    .filter(Boolean)
-    .filter(t => !['select', 'where', 'group', 'order', 'limit', 'having'].includes(t.toLowerCase()))
-    .map(t => t.replace(/^olist_/, '').replace(/_/g, ' '))
-  return [...new Set(tables)] // Remove duplicates
-}
 
 export function ChatUI({ className = '' }: ChatUIProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -103,25 +88,23 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [queryMode, setQueryMode] = useState(false) // Toggle between chat and query mode (default: chat)
   const [mounted, setMounted] = useState(false)
-  const [pendingVisualization, setPendingVisualization] = useState<{
-    sql: string
-    explanation: string
-    data: any[]
-    columns: string[]
-    visualizationType: 'table' | 'bar' | 'line' | 'pie' | 'map' | 'metric'
-    executionTime?: number
-    cached?: boolean
-  } | null>(null)
+  const [pendingVisualization, setPendingVisualization] = useState<QueryResultType | null>(null)
   const [showVisualization, setShowVisualization] = useState(false)
-  const [currentVisualization, setCurrentVisualization] = useState<{
-    sql: string
-    explanation: string
-    data: any[]
-    columns: string[]
-    visualizationType: 'table' | 'bar' | 'line' | 'pie' | 'map' | 'metric'
-    executionTime?: number
-    cached?: boolean
-  } | null>(null)
+  const [currentVisualization, setCurrentVisualization] = useState<QueryResultType | null>(null)
+  const [activeAnalyticsMessageIndex, setActiveAnalyticsMessageIndex] = useState<number | null>(null)
+  const [isClearingCache, setIsClearingCache] = useState(false)
+
+  // Refs for messages containers to enable auto-scroll
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      const container = messagesContainerRef.current
+      container.scrollTop = container.scrollHeight
+    }
+  }, [messages, isLoading])
 
   // Set mounted state after hydration
   useEffect(() => {
@@ -158,6 +141,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     setPendingVisualization(null)
     setShowVisualization(false)
     setCurrentVisualization(null)
+    setActiveAnalyticsMessageIndex(null)
     if (isLocalStorageAvailable()) {
       try {
         localStorage.removeItem(STORAGE_KEY)
@@ -171,6 +155,29 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     }
   }
 
+  // Clear Redis cache
+  const clearCache = async () => {
+    setIsClearingCache(true)
+    try {
+      const response = await fetch('/api/clear-cache', {
+        method: 'DELETE',
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to clear cache')
+      }
+
+      toast.success(data.message || `Cache cleared successfully (${data.deletedCount || 0} entries)`)
+    } catch (error: any) {
+      console.error('Clear cache error:', error)
+      toast.error(error.message || 'Failed to clear cache')
+    } finally {
+      setIsClearingCache(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -179,32 +186,44 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       return
     }
 
-    const userInput = input.trim().toLowerCase()
+    const userInput = input.trim()
     
     // Check if user is responding to visualization prompt
     if (pendingVisualization) {
-      console.log('Pending visualization exists, checking user response:', userInput)
-      if (userInput === 'yes' || userInput === 'y' || userInput.startsWith('yes')) {
+      const visualizationResponse = isVisualizationResponse(userInput)
+      console.log('Pending visualization exists, checking user response:', userInput, visualizationResponse)
+      
+      if (visualizationResponse === 'yes') {
         console.log('User said yes, showing visualization', pendingVisualization)
         // Show visualization - use functional update to ensure state is set correctly
         setCurrentVisualization({ ...pendingVisualization })
         setShowVisualization(true)
         setPendingVisualization(null)
         
+        // Update the last assistant message to include queryResult and set active index
+        setMessages(prev => {
+          const updated = [...prev]
+          const lastMessageIndex = updated.length - 1
+          const lastMessage = updated[lastMessageIndex]
+          if (lastMessage && lastMessage.role === 'assistant') {
+            updated[lastMessageIndex] = {
+              ...lastMessage,
+              queryResult: pendingVisualization
+            }
+            setActiveAnalyticsMessageIndex(lastMessageIndex)
+          }
+          return updated
+        })
+        
         const userMessage: ChatMessage = {
           role: 'user',
           content: input,
           timestamp: new Date()
         }
-        const assistantMessage: ChatMessage = {
-          role: 'assistant',
-          content: 'Opening visualization panel...',
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, userMessage, assistantMessage])
+        setMessages(prev => [...prev, userMessage])
         setInput('')
         return
-      } else if (userInput === 'no' || userInput === 'n' || userInput.startsWith('no')) {
+      } else if (visualizationResponse === 'no') {
         console.log('User said no, dismissing visualization')
         // Don't show visualization
         setPendingVisualization(null)
@@ -225,49 +244,41 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       }
     }
 
+    // Check if user is asking to analyze current visualization
+    if (showVisualization && currentVisualization && isVisualizationAnalysisRequest(userInput)) {
+      const insights = generateVisualizationInsights(
+        currentVisualization.data,
+        currentVisualization.columns,
+        currentVisualization.visualizationType
+      )
+      
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: input,
+        timestamp: new Date()
+      }
+      
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: insights,
+        timestamp: new Date()
+      }
+      
+      setMessages(prev => [...prev, userMessage, assistantMessage])
+      setInput('')
+      return
+    }
+
     // Clear previous visualization when starting a new query
     if (pendingVisualization) {
       setPendingVisualization(null)
     }
-    if (showVisualization) {
+    if (showVisualization && !isVisualizationAnalysisRequest(userInput)) {
       setShowVisualization(false)
       setCurrentVisualization(null)
+      setActiveAnalyticsMessageIndex(null)
     }
 
-    // Detect if this is a data/visualization query even in chat mode
-    const isDataQuery = (question: string): boolean => {
-      const lowerQuestion = question.toLowerCase()
-      
-      // Keywords that indicate a data query
-      const dataKeywords = [
-        'chart', 'graph', 'visualization', 'visualize', 'pie chart', 'bar chart', 
-        'line chart', 'table', 'data', 'show me', 'list', 'count', 'how many',
-        'total', 'sum', 'average', 'percentage', 'percent', 'revenue', 'sales',
-        'orders', 'customers', 'products', 'sellers', 'top', 'bottom', 'highest',
-        'lowest', 'by', 'group by', 'aggregate', 'statistics', 'stats'
-      ]
-      
-      // Visualization-specific patterns
-      const visualizationPatterns = [
-        /(pie|bar|line|chart|graph|visualization|visualize)/i,
-        /(show|display|create|generate).*(chart|graph|visualization)/i,
-        /(percentage|percent).*(of|for)/i,
-        /(top|bottom)\s+\d+/i,
-        /(count|total|sum|average|avg).*(by|of|for)/i
-      ]
-      
-      // Check for data keywords
-      const hasDataKeyword = dataKeywords.some(keyword => lowerQuestion.includes(keyword))
-      
-      // Check for visualization patterns
-      const hasVisualizationPattern = visualizationPatterns.some(pattern => pattern.test(question))
-      
-      // Check if asking for specific data
-      const isAskingForData = /(show|display|list|get|find|what are|how many|how much)/i.test(question) &&
-                              (hasDataKeyword || hasVisualizationPattern)
-      
-      return hasDataKeyword || hasVisualizationPattern || isAskingForData
-    }
 
     // Auto-detect data queries in chat mode and route to query API
     const shouldUseQueryAPI = queryMode || isDataQuery(input)
@@ -317,170 +328,38 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       })
       
       if (shouldUseQueryAPI) {
-        // Analytics Mode - check if it's conversational or has data
-        // Only treat as conversational if there's no data AND it's marked as conversational
-        const hasData = data.data !== undefined && Array.isArray(data.data) && data.data.length > 0
-        const isConversationalOnly = data.isConversational && !hasData
+        // Analytics Mode - process using chat handlers
+        const queryResult = createQueryResult(data)
+        const processed = processAnalyticsResponse(data, queryResult)
         
-        if (isConversationalOnly) {
-          console.log('Treating as conversational response (no data)')
-          // Conversational response (no SQL/data)
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: data.explanation || data.message || 'No response',
-            timestamp: new Date(),
-            cached: data.cached
-          }
-          setMessages(prev => [...prev, assistantMessage])
-          
-          if (data.cached) {
-            toast.success('Response loaded from cache')
-          }
-        } else if (hasData) {
-          // Query response with data visualization - ask user first
-          console.log('Query has data, asking user for visualization:', data.data.length, 'rows', {
-            sql: data.sql,
-            columns: data.columns,
-            visualizationType: data.visualizationType
-          })
-          
-          const queryResult = {
-            sql: data.sql || '',
-            explanation: data.explanation || '',
-            data: data.data,
-            columns: data.columns || [],
-            visualizationType: data.visualizationType || 'table',
-            executionTime: data.executionTime,
-            cached: data.cached
-          }
-          
-          // Extract table names from SQL for better context
-          const tableNames = extractTableNames(data.sql || '')
-          const tableInfo = tableNames.length > 0 
-            ? `\n\n📊 **Data Source:** ${tableNames.join(', ')}`
-            : ''
-          
-          // Store pending visualization
+        // Store query result in message if it's a simple query
+        if (processed.isSimple) {
+          processed.message.queryResult = queryResult
+        }
+        
+        // Store pending visualization if we should prompt
+        if (processed.shouldPromptForVisualization) {
           setPendingVisualization(queryResult)
-          
-          // Ask user if they want to see visualization
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: `${data.explanation || 'I found the data you requested.'}${tableInfo}\n\n**Would you like to see the visualization and SQL query?** (Type "yes" or "no")`,
-            timestamp: new Date(),
-            cached: data.cached
-          }
-          setMessages(prev => [...prev, assistantMessage])
-          
-          if (data.cached) {
-            toast.success('Results loaded from cache')
-          } else {
-            toast.success(`Query executed in ${data.executionTime}ms`)
-          }
-        } else if (data.sql && data.sql.trim() !== '') {
-          // Has SQL but no data - might be an empty result set, still show the query
-          console.log('Query has SQL but no data, showing SQL anyway')
-          const queryResult = {
-            sql: data.sql,
-            explanation: data.explanation || 'Query executed but returned no results.',
-            data: [],
-            columns: data.columns || [],
-            visualizationType: data.visualizationType || 'table',
-            executionTime: data.executionTime,
-            cached: data.cached
-          }
-          
-          // Extract table names from SQL
-          const tableNames = extractTableNames(data.sql || '')
-          const tableInfo = tableNames.length > 0 
-            ? `\n\n📊 **Data Source:** ${tableNames.join(', ')}`
-            : ''
-          
-          setPendingVisualization(queryResult)
-          
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: `${data.explanation || 'Query executed but returned no results.'}${tableInfo}\n\n**Would you like to see the SQL query?** (Type "yes" or "no")`,
-            timestamp: new Date(),
-            cached: data.cached
-          }
-          setMessages(prev => [...prev, assistantMessage])
-        } else {
-          // Fallback: no data and no SQL
-          console.log('Unexpected data structure:', data)
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: data.explanation || data.message || 'Received response but unable to process visualization.',
-            timestamp: new Date(),
-            cached: data.cached
-          }
-          setMessages(prev => [...prev, assistantMessage])
+        }
+        
+        setMessages(prev => [...prev, processed.message])
+        
+        if (data.cached) {
+          toast.success('Results loaded from cache')
+        } else if (data.executionTime) {
+          toast.success(`Query executed in ${data.executionTime}ms`)
         }
       } else {
-        // Chat response
+        // Chat response - process using chat handlers
+        const assistantMessage = processChatResponse(data)
+        setMessages(prev => [...prev, assistantMessage])
+        
+        if (data.cached) {
+          toast.success('Response loaded from cache')
+        }
+        
         if (data.error) {
-          // Show error message
-          const errorMessage: ChatMessage = {
-            role: 'assistant',
-            content: `Error: ${data.message || data.error}\n\n${data.hint ? `Hint: ${data.hint}` : ''}`,
-            timestamp: new Date()
-          }
-          setMessages(prev => [...prev, errorMessage])
           toast.error(data.message || data.error)
-        } else {
-          let responseContent = data.response?.text || data.message || 'No response'
-          
-          // Check if response is explaining how to query rather than providing actual data
-          const isExplanatoryResponse = (text: string): boolean => {
-            const lowerText = text.toLowerCase()
-            // Patterns that indicate the response is explaining how to query, not providing data
-            const explanatoryPatterns = [
-              /you can use/i,
-              /you can query/i,
-              /use the .* function/i,
-              /use .* sql/i,
-              /to find out/i,
-              /you would use/i,
-              /you should use/i,
-              /you need to/i,
-              /you'll need to/i,
-              /you can run/i,
-              /run a query/i,
-              /execute a query/i,
-              /write a query/i,
-              /create a query/i,
-            ]
-            
-            // Check if response contains explanatory patterns
-            const hasExplanatoryPattern = explanatoryPatterns.some(pattern => pattern.test(text))
-            
-            // Check if response doesn't contain actual data (numbers, counts, results)
-            const hasNoData = !/\d+/.test(text) && 
-                             !lowerText.includes('result') && 
-                             !lowerText.includes('found') &&
-                             !lowerText.includes('there are') &&
-                             !lowerText.includes('total') &&
-                             !lowerText.includes('count')
-            
-            return hasExplanatoryPattern || (hasNoData && lowerText.includes('query'))
-          }
-          
-          // If response is explanatory and not from cache, suggest using analytics mode
-          if (isExplanatoryResponse(responseContent) && !data.cached) {
-            responseContent += '\n\n💡 **Tip:** Switch to **Analytics Mode** for detailed queries and actual data results.'
-          }
-          
-          const assistantMessage: ChatMessage = {
-            role: 'assistant',
-            content: responseContent,
-            timestamp: new Date(),
-            cached: data.cached
-          }
-          setMessages(prev => [...prev, assistantMessage])
-          
-          if (data.cached) {
-            toast.success('Response loaded from cache')
-          }
         }
       }
     } catch (error: any) {
@@ -507,11 +386,11 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   }
 
   return (
-    <div className={`h-full overflow-hidden ${className}`}>
+    <div className={`overflow-hidden ${className || 'h-full'}`}>
       {showVisualization && currentVisualization ? (
         <ResizablePanelGroup direction="horizontal" className="h-full">
           <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
-            <Card className="flex flex-col h-full">
+            <Card className="flex flex-col h-full overflow-hidden">
               <CardHeader className="flex-shrink-0 pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-base">
@@ -533,9 +412,12 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                 </div>
               </CardHeader>
               
-              <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4">
+              <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4 overflow-hidden" style={{ height: 0 }}>
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2">
+                <div 
+                  ref={messagesContainerRef}
+                  className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2"
+                >
                   {messages.length === 0 ? (
                     <div className="text-center text-muted-foreground py-8">
                       <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
@@ -568,15 +450,27 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                             </div>
                           )}
-                          <p className="text-[10px] opacity-70">
+                          {message.queryResult && (
+                            <div className="mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setCurrentVisualization(message.queryResult!)
+                                  setShowVisualization(true)
+                                  setActiveAnalyticsMessageIndex(index)
+                                }}
+                                className="text-[10px] h-6 px-2"
+                              >
+                                <BarChart3 className="h-3 w-3 mr-1" />
+                                Analytics
+                              </Button>
+                            </div>
+                          )}
+                          <p className="text-[10px] opacity-70 mt-1">
                             {message.timestamp.toLocaleTimeString()}
                           </p>
                         </div>
-                        {message.queryResult && (
-                          <div className="w-full mt-1.5">
-                            <QueryResult {...message.queryResult} />
-                          </div>
-                        )}
                       </div>
                     ))
                   )}
@@ -591,6 +485,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                       </div>
                     </div>
                   )}
+                  <div ref={messagesEndRef} />
                 </div>
 
                 {/* Input */}
@@ -644,6 +539,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                     onClick={() => {
                       setShowVisualization(false)
                       setCurrentVisualization(null)
+                      setActiveAnalyticsMessageIndex(null)
                     }}
                     className="h-7 w-7 p-0"
                     title="Close visualization"
@@ -659,7 +555,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
-        <Card className="flex flex-col h-full">
+        <Card className="flex flex-col h-full overflow-hidden">
           <CardHeader className="flex-shrink-0 pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -681,9 +577,12 @@ export function ChatUI({ className = '' }: ChatUIProps) {
             </div>
           </CardHeader>
           
-          <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4">
+          <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4 overflow-hidden" style={{ height: 0 }}>
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2">
+            <div 
+              ref={messagesContainerRef}
+              className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2"
+            >
               {messages.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8">
                   <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
@@ -716,15 +615,27 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
                         </div>
                       )}
-                      <p className="text-[10px] opacity-70">
+                      {message.queryResult && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentVisualization(message.queryResult!)
+                              setShowVisualization(true)
+                              setActiveAnalyticsMessageIndex(index)
+                            }}
+                            className="text-[10px] h-6 px-2"
+                          >
+                            <BarChart3 className="h-3 w-3 mr-1" />
+                            Analytics
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-[10px] opacity-70 mt-1">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
-                    {message.queryResult && (
-                      <div className="w-full mt-1.5">
-                        <QueryResult {...message.queryResult} />
-                      </div>
-                    )}
                   </div>
                 ))
               )}
@@ -739,6 +650,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
@@ -773,6 +685,28 @@ export function ChatUI({ className = '' }: ChatUIProps) {
           </CardContent>
         </Card>
       )}
+      
+      {/* Clear Cache Button - Bottom Right */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={clearCache}
+        disabled={isClearingCache}
+        className="fixed bottom-4 right-4 h-8 px-2 text-xs shadow-lg z-50"
+        title="Clear Redis Cache"
+      >
+        {isClearingCache ? (
+          <>
+            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+            Clearing...
+          </>
+        ) : (
+          <>
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Clear Cache
+          </>
+        )}
+      </Button>
     </div>
   )
 }
