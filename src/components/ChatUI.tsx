@@ -94,6 +94,14 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   const [activeAnalyticsMessageIndex, setActiveAnalyticsMessageIndex] = useState<number | null>(null)
   const [isClearingCache, setIsClearingCache] = useState(false)
 
+  // Example prompts for first-time/empty state
+  const examplePrompts: string[] = [
+    'Show me revenue trends by month',
+    'Which product categories perform best?',
+    'What payment methods are most popular?',
+    'What are the top customer locations?',
+  ]
+
   // Refs for messages containers to enable auto-scroll
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
@@ -207,15 +215,17 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, overrideInput?: string) => {
     e.preventDefault()
     
-    if (!input.trim()) {
+    const effectiveInput = typeof overrideInput === 'string' ? overrideInput : input
+
+    if (!effectiveInput.trim()) {
       toast.error('Please enter a question')
       return
     }
 
-    const userInput = input.trim()
+    const userInput = effectiveInput.trim()
     
     // Check if user is responding to visualization prompt
     if (pendingVisualization) {
@@ -246,7 +256,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
         
         const userMessage: ChatMessage = {
           role: 'user',
-          content: input,
+          content: userInput,
           timestamp: new Date()
         }
         setMessages(prev => [...prev, userMessage])
@@ -259,7 +269,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
         
         const userMessage: ChatMessage = {
           role: 'user',
-          content: input,
+          content: userInput,
           timestamp: new Date()
         }
         const assistantMessage: ChatMessage = {
@@ -283,7 +293,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       
       const userMessage: ChatMessage = {
         role: 'user',
-        content: input,
+        content: userInput,
         timestamp: new Date()
       }
       
@@ -310,16 +320,16 @@ export function ChatUI({ className = '' }: ChatUIProps) {
 
 
     // Auto-detect data queries in chat mode and route to query API
-    const shouldUseQueryAPI = queryMode || isDataQuery(input)
+    const shouldUseQueryAPI = queryMode || isDataQuery(userInput)
     
     // If we detect a data query in chat mode, automatically switch to query mode behavior
-    if (!queryMode && isDataQuery(input)) {
+    if (!queryMode && isDataQuery(userInput)) {
       console.log('Detected data query in chat mode, routing to query API')
     }
 
     const userMessage: ChatMessage = {
       role: 'user',
-      content: input,
+      content: userInput,
       timestamp: new Date()
     }
 
@@ -337,7 +347,7 @@ export function ChatUI({ className = '' }: ChatUIProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          question: input,
+          question: userInput,
         }),
       })
 
@@ -414,6 +424,17 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     }
   }
 
+  // Handle clicking an example prompt
+  const runExample = (prompt: string) => {
+    setInput(prompt)
+    // Defer to ensure input state updates before submit
+    setTimeout(() => {
+      // Create a minimal fake event to satisfy signature
+      const fakeEvent = { preventDefault: () => {} } as unknown as React.FormEvent
+      handleSubmit(fakeEvent, prompt)
+    }, 0)
+  }
+
   return (
     <div className={`overflow-hidden ${className || 'h-full'}`}>
       {showVisualization && currentVisualization ? (
@@ -448,8 +469,26 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                   className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2"
                 >
                   {messages.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-8">
-                      <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
+                    <div className="mx-auto max-w-3xl">
+                      <div className="text-center rounded-lg border p-6 bg-card">
+                        <h2 className="text-lg font-semibold mb-2">Welcome to Dataset Chat!</h2>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          Ask me anything about the Brazilian E-Commerce dataset. Try one of these:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {examplePrompts.map((p, idx) => (
+                            <Button
+                              key={idx}
+                              variant="outline"
+                              size="sm"
+                              className="justify-start text-xs"
+                              onClick={() => runExample(p)}
+                            >
+                              {p}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     messages.map((message, index) => (
@@ -613,8 +652,26 @@ export function ChatUI({ className = '' }: ChatUIProps) {
               className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2"
             >
               {messages.length === 0 ? (
-                <div className="text-center text-muted-foreground py-8">
-                  <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
+                <div className="mx-auto max-w-3xl">
+                  <div className="text-center rounded-lg border p-6 bg-card">
+                    <h2 className="text-lg font-semibold mb-2">Welcome to Dataset Chat!</h2>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Ask me anything about the Brazilian E-Commerce dataset. Try one of these:
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {examplePrompts.map((p, idx) => (
+                        <Button
+                          key={idx}
+                          variant="outline"
+                          size="sm"
+                          className="justify-start text-xs"
+                          onClick={() => runExample(p)}
+                        >
+                          {p}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 messages.map((message, index) => (
