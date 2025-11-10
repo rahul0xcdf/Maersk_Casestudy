@@ -178,6 +178,35 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     }
   }
 
+  // Find the latest assistant message with analytics result
+  const getLatestAnalyticsMessage = (): { index: number, result: QueryResultType } | null => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg && msg.role === 'assistant' && msg.queryResult) {
+        return { index: i, result: msg.queryResult }
+      }
+    }
+    return null
+  }
+
+  // Toggle analytics pane visibility; when opening, show latest result if available
+  const toggleAnalyticsPane = () => {
+    if (showVisualization) {
+      setShowVisualization(false)
+      setCurrentVisualization(null)
+      setActiveAnalyticsMessageIndex(null)
+      return
+    }
+    const latest = getLatestAnalyticsMessage()
+    if (latest) {
+      setCurrentVisualization(latest.result)
+      setShowVisualization(true)
+      setActiveAnalyticsMessageIndex(latest.index)
+    } else {
+      toast.info('No analytics available yet. Ask a data question first.')
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -499,12 +528,12 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                     disabled={isLoading}
                   />
                   <Button
-                    variant={queryMode ? "default" : "outline"}
+                    variant={showVisualization ? "default" : "outline"}
                     size="sm"
                     type="button"
-                    onClick={() => setQueryMode(!queryMode)}
+                    onClick={toggleAnalyticsPane}
                     className="h-[50px] text-xs"
-                    title={queryMode ? "Switch to Chat Mode" : "Switch to Analytics Mode"}
+                    title={showVisualization ? "Hide Analytics" : "Show Analytics"}
                   >
                     <Database className="h-3 w-3 mr-1.5" />
                     Analytics
@@ -664,12 +693,12 @@ export function ChatUI({ className = '' }: ChatUIProps) {
                 disabled={isLoading}
               />
               <Button
-                variant={queryMode ? "default" : "outline"}
+                variant={showVisualization ? "default" : "outline"}
                 size="sm"
                 type="button"
-                onClick={() => setQueryMode(!queryMode)}
+                onClick={toggleAnalyticsPane}
                 className="h-[50px] text-xs"
-                title={queryMode ? "Switch to Chat Mode" : "Switch to Analytics Mode"}
+                title={showVisualization ? "Hide Analytics" : "Show Analytics"}
               >
                 <Database className="h-3 w-3 mr-1.5" />
                 Analytics

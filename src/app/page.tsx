@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Database, MessageCircle, BarChart3, TrendingUp, Users, ShoppingCart } from 'lucide-react'
+import { Database, MessageCircle, BarChart3, TrendingUp, Users, ShoppingCart, Github, Linkedin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 
@@ -108,9 +108,31 @@ export default function Home() {
         transition={{ duration: 0.6, delay: 0.7 }}
         className="py-6 px-4 text-center border-t"
       >
-        <p className="text-sm text-muted-foreground">
-          Website developed by <span className="font-semibold text-foreground">Rahul R</span>
-        </p>
+        <div className="flex items-center justify-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Built the tool by <span className="font-semibold text-foreground">Rahul R</span>
+          </p>
+          <a
+            href="https://github.com/rahul0xcdf/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center text-muted-foreground hover:text-foreground"
+            aria-label="GitHub"
+            title="GitHub"
+          >
+            <Github className="h-4 w-4" />
+          </a>
+          <a
+            href="https://www.linkedin.com/in/rahul0xcdf/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center text-muted-foreground hover:text-foreground"
+            aria-label="LinkedIn"
+            title="LinkedIn"
+          >
+            <Linkedin className="h-4 w-4" />
+          </a>
+        </div>
       </motion.footer>
     </div>
   )

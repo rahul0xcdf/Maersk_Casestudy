@@ -11,6 +11,7 @@ DECLARE
   result JSON;
   normalized_query TEXT;
   cleaned_query TEXT;
+  query_no_comments TEXT;
 BEGIN
   -- Clean the query - remove trailing semicolons and extra whitespace
   cleaned_query := TRIM(query_text);
@@ -23,14 +24,22 @@ BEGIN
   
   -- Normalize for validation
   normalized_query := LOWER(cleaned_query);
+
+  -- Remove SQL comments before validation
+  -- Strip block comments /* ... */
+  query_no_comments := REGEXP_REPLACE(normalized_query, '/\*.*?\*/', '', 'gs');
+  -- Strip single-line comments -- ...
+  query_no_comments := REGEXP_REPLACE(query_no_comments, '--.*$', '', 'gm');
+  -- Trim again after removing comments
+  query_no_comments := TRIM(query_no_comments);
   
   -- Safety check: Only allow SELECT statements
-  IF NOT normalized_query LIKE 'select%' THEN
+  IF NOT (query_no_comments LIKE 'select%' OR query_no_comments LIKE 'with%') THEN
     RAISE EXCEPTION 'Only SELECT queries are allowed';
   END IF;
   
   -- Block dangerous patterns (check after removing semicolon)
-  IF normalized_query ~* '(drop|delete|update|insert|alter|create|truncate|grant|revoke|exec|execute)' THEN
+  IF query_no_comments ~* '(drop|delete|update|insert|alter|create|truncate|grant|revoke|exec|execute)' THEN
     RAISE EXCEPTION 'Potentially dangerous SQL operations are not allowed';
   END IF;
   
