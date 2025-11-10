@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { QueryResult } from '@/components/QueryResult'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -80,6 +81,20 @@ function loadMessagesFromStorage(): ChatMessage[] {
     console.error('Failed to load chat history from localStorage:', error)
     return []
   }
+}
+
+// Helper function to extract table names from SQL
+function extractTableNames(sql: string): string[] {
+  if (!sql) return []
+  // Match table names from FROM and JOIN clauses (handle aliases and schema prefixes)
+  const tablePattern = /(?:FROM|JOIN)\s+(?:[a-z_]+\.)?([a-z_]+)(?:\s+[a-z]+)?/gi
+  const matches = [...sql.matchAll(tablePattern)]
+  const tables = matches
+    .map(m => m[1])
+    .filter(Boolean)
+    .filter(t => !['select', 'where', 'group', 'order', 'limit', 'having'].includes(t.toLowerCase()))
+    .map(t => t.replace(/^olist_/, '').replace(/_/g, ' '))
+  return [...new Set(tables)] // Remove duplicates
 }
 
 export function ChatUI({ className = '' }: ChatUIProps) {
@@ -219,6 +234,49 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       setCurrentVisualization(null)
     }
 
+    // Detect if this is a data/visualization query even in chat mode
+    const isDataQuery = (question: string): boolean => {
+      const lowerQuestion = question.toLowerCase()
+      
+      // Keywords that indicate a data query
+      const dataKeywords = [
+        'chart', 'graph', 'visualization', 'visualize', 'pie chart', 'bar chart', 
+        'line chart', 'table', 'data', 'show me', 'list', 'count', 'how many',
+        'total', 'sum', 'average', 'percentage', 'percent', 'revenue', 'sales',
+        'orders', 'customers', 'products', 'sellers', 'top', 'bottom', 'highest',
+        'lowest', 'by', 'group by', 'aggregate', 'statistics', 'stats'
+      ]
+      
+      // Visualization-specific patterns
+      const visualizationPatterns = [
+        /(pie|bar|line|chart|graph|visualization|visualize)/i,
+        /(show|display|create|generate).*(chart|graph|visualization)/i,
+        /(percentage|percent).*(of|for)/i,
+        /(top|bottom)\s+\d+/i,
+        /(count|total|sum|average|avg).*(by|of|for)/i
+      ]
+      
+      // Check for data keywords
+      const hasDataKeyword = dataKeywords.some(keyword => lowerQuestion.includes(keyword))
+      
+      // Check for visualization patterns
+      const hasVisualizationPattern = visualizationPatterns.some(pattern => pattern.test(question))
+      
+      // Check if asking for specific data
+      const isAskingForData = /(show|display|list|get|find|what are|how many|how much)/i.test(question) &&
+                              (hasDataKeyword || hasVisualizationPattern)
+      
+      return hasDataKeyword || hasVisualizationPattern || isAskingForData
+    }
+
+    // Auto-detect data queries in chat mode and route to query API
+    const shouldUseQueryAPI = queryMode || isDataQuery(input)
+    
+    // If we detect a data query in chat mode, automatically switch to query mode behavior
+    if (!queryMode && isDataQuery(input)) {
+      console.log('Detected data query in chat mode, routing to query API')
+    }
+
     const userMessage: ChatMessage = {
       role: 'user',
       content: input,
@@ -230,8 +288,8 @@ export function ChatUI({ className = '' }: ChatUIProps) {
     setIsLoading(true)
 
     try {
-      // Use query API for analytics questions, chat API for general questions
-      const endpoint = queryMode ? '/api/query' : '/api/chat'
+      // Use query API for analytics questions or detected data queries, chat API for general questions
+      const endpoint = shouldUseQueryAPI ? '/api/query' : '/api/chat'
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -251,13 +309,14 @@ export function ChatUI({ className = '' }: ChatUIProps) {
       const data = await response.json()
       console.log('Response data:', { 
         queryMode, 
+        shouldUseQueryAPI,
         hasData: data.data !== undefined, 
         dataLength: data.data?.length, 
         isConversational: data.isConversational,
         error: data.error 
       })
       
-      if (queryMode) {
+      if (shouldUseQueryAPI) {
         // Analytics Mode - check if it's conversational or has data
         // Only treat as conversational if there's no data AND it's marked as conversational
         const hasData = data.data !== undefined && Array.isArray(data.data) && data.data.length > 0
@@ -295,13 +354,19 @@ export function ChatUI({ className = '' }: ChatUIProps) {
             cached: data.cached
           }
           
+          // Extract table names from SQL for better context
+          const tableNames = extractTableNames(data.sql || '')
+          const tableInfo = tableNames.length > 0 
+            ? `\n\n📊 **Data Source:** ${tableNames.join(', ')}`
+            : ''
+          
           // Store pending visualization
           setPendingVisualization(queryResult)
           
           // Ask user if they want to see visualization
           const assistantMessage: ChatMessage = {
             role: 'assistant',
-            content: `${data.explanation || 'I found the data you requested.'}\n\n**Would you like to see the visualization and SQL query?** (Type "yes" or "no")`,
+            content: `${data.explanation || 'I found the data you requested.'}${tableInfo}\n\n**Would you like to see the visualization and SQL query?** (Type "yes" or "no")`,
             timestamp: new Date(),
             cached: data.cached
           }
@@ -325,11 +390,17 @@ export function ChatUI({ className = '' }: ChatUIProps) {
             cached: data.cached
           }
           
+          // Extract table names from SQL
+          const tableNames = extractTableNames(data.sql || '')
+          const tableInfo = tableNames.length > 0 
+            ? `\n\n📊 **Data Source:** ${tableNames.join(', ')}`
+            : ''
+          
           setPendingVisualization(queryResult)
           
           const assistantMessage: ChatMessage = {
             role: 'assistant',
-            content: `${data.explanation || 'Query executed but returned no results.'}\n\n**Would you like to see the SQL query?** (Type "yes" or "no")`,
+            content: `${data.explanation || 'Query executed but returned no results.'}${tableInfo}\n\n**Would you like to see the SQL query?** (Type "yes" or "no")`,
             timestamp: new Date(),
             cached: data.cached
           }
@@ -436,152 +507,271 @@ export function ChatUI({ className = '' }: ChatUIProps) {
   }
 
   return (
-    <div className={`flex gap-4 h-full overflow-hidden ${className}`}>
-      {/* Chat Section */}
-      <Card className={`flex flex-col h-full transition-all duration-300 ${showVisualization ? 'flex-1 min-w-0' : 'flex-1'}`}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <MessageCircle className="h-5 w-5" />
-              AI Assistant
-            </CardTitle>
-            {messages.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearChat}
-                className="text-xs"
-                title="Clear chat history"
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Clear
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        
-        <CardContent className="flex-1 flex flex-col gap-4 min-h-0">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
-            {messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <MessageCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              </div>
-            ) : (
-              messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  <div
-                    className={`rounded-lg p-3 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground max-w-[50%]'
-                        : 'bg-muted max-w-[50%]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium">
-                        {message.role === 'user' ? 'You' : 'AI Assistant'}
-                      </span>
-                      {message.cached && (
-                        <Badge variant="secondary" className="text-xs">
-                          Cached
-                        </Badge>
-                      )}
+    <div className={`h-full overflow-hidden ${className}`}>
+      {showVisualization && currentVisualization ? (
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          <ResizablePanel defaultSize={60} minSize={30} className="min-w-0">
+            <Card className="flex flex-col h-full">
+              <CardHeader className="flex-shrink-0 pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <MessageCircle className="h-4 w-4" />
+                    AI Assistant
+                  </CardTitle>
+                  {messages.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearChat}
+                      className="text-xs h-7"
+                      title="Clear chat history"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              
+              <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4">
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2">
+                  {messages.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
                     </div>
-                    {message.content && (
-                      <div className="text-sm mb-2 [&>p]:mb-2 [&>ul]:list-disc [&>ul]:ml-4 [&>ol]:list-decimal [&>ol]:ml-4 [&>code]:bg-muted [&>code]:px-1 [&>code]:rounded [&>pre]:bg-muted [&>pre]:p-2 [&>pre]:rounded [&>pre]:overflow-x-auto [&>h1]:text-lg [&>h1]:font-bold [&>h2]:text-base [&>h2]:font-bold [&>h3]:text-sm [&>h3]:font-bold [&>strong]:font-bold [&>em]:italic">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                  ) : (
+                    messages.map((message, index) => (
+                      <div
+                        key={index}
+                        className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+                      >
+                        <div
+                          className={`rounded-lg p-2.5 ${
+                            message.role === 'user'
+                              ? 'bg-primary text-primary-foreground max-w-[70%]'
+                              : 'bg-muted max-w-[70%]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] font-medium">
+                              {message.role === 'user' ? 'You' : 'AI Assistant'}
+                            </span>
+                            {message.cached && (
+                              <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                Cached
+                              </Badge>
+                            )}
+                          </div>
+                          {message.content && (
+                            <div className="text-xs mb-1.5 leading-relaxed [&>p]:mb-1.5 [&>p]:leading-relaxed [&>ul]:list-disc [&>ul]:ml-3 [&>ul]:text-xs [&>ol]:list-decimal [&>ol]:ml-3 [&>ol]:text-xs [&>code]:bg-muted [&>code]:px-1 [&>code]:rounded [&>code]:text-[10px] [&>pre]:bg-muted [&>pre]:p-2 [&>pre]:rounded [&>pre]:overflow-x-auto [&>pre]:text-[10px] [&>h1]:text-sm [&>h1]:font-bold [&>h2]:text-xs [&>h2]:font-bold [&>h3]:text-[10px] [&>h3]:font-bold [&>strong]:font-bold [&>em]:italic">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                            </div>
+                          )}
+                          <p className="text-[10px] opacity-70">
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
+                        {message.queryResult && (
+                          <div className="w-full mt-1.5">
+                            <QueryResult {...message.queryResult} />
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <p className="text-xs opacity-70">
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
-                  </div>
-                  {message.queryResult && (
-                    <div className="w-full mt-2">
-                      <QueryResult {...message.queryResult} />
+                    ))
+                  )}
+                  
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[80%] rounded-lg p-2.5 bg-muted">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span className="text-xs">Thinking...</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              ))
-            )}
-            
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-lg p-3 bg-muted">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">Thinking...</span>
+
+                {/* Input */}
+                <form onSubmit={handleSubmit} className="flex gap-2 items-end flex-shrink-0">
+                  <Textarea
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask about the dataset..."
+                    className="min-h-[50px] max-h-[100px] resize-none flex-1 text-xs"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    variant={queryMode ? "default" : "outline"}
+                    size="sm"
+                    type="button"
+                    onClick={() => setQueryMode(!queryMode)}
+                    className="h-[50px] text-xs"
+                    title={queryMode ? "Switch to Chat Mode" : "Switch to Analytics Mode"}
+                  >
+                    <Database className="h-3 w-3 mr-1.5" />
+                    Analytics
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={isLoading || !input.trim()}
+                    className="h-[50px] px-3 text-xs"
+                  >
+                    <Send className="h-3 w-3" />
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          <ResizablePanel defaultSize={40} minSize={25} className="min-w-0">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              <Card className="flex flex-col h-full">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 flex-shrink-0 p-4">
+                  <CardTitle className="text-sm">Visualization & SQL</CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowVisualization(false)
+                      setCurrentVisualization(null)
+                    }}
+                    className="h-7 w-7 p-0"
+                    title="Close visualization"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto min-h-0 p-4">
+                  <QueryResult {...currentVisualization} />
+                </CardContent>
+              </Card>
+            </motion.div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        <Card className="flex flex-col h-full">
+          <CardHeader className="flex-shrink-0 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MessageCircle className="h-4 w-4" />
+                AI Assistant
+              </CardTitle>
+              {messages.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearChat}
+                  className="text-xs h-7"
+                  title="Clear chat history"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          
+          <CardContent className="flex-1 flex flex-col gap-3 min-h-0 p-4">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto space-y-3 min-h-0 pr-2">
+              {messages.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <MessageCircle className="h-10 w-10 mx-auto mb-4 opacity-50" />
+                </div>
+              ) : (
+                messages.map((message, index) => (
+                  <div
+                    key={index}
+                    className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+                  >
+                    <div
+                      className={`rounded-lg p-2.5 ${
+                        message.role === 'user'
+                          ? 'bg-primary text-primary-foreground max-w-[70%]'
+                          : 'bg-muted max-w-[70%]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[10px] font-medium">
+                          {message.role === 'user' ? 'You' : 'AI Assistant'}
+                        </span>
+                        {message.cached && (
+                          <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                            Cached
+                          </Badge>
+                        )}
+                      </div>
+                      {message.content && (
+                        <div className="text-xs mb-1.5 leading-relaxed [&>p]:mb-1.5 [&>p]:leading-relaxed [&>ul]:list-disc [&>ul]:ml-3 [&>ul]:text-xs [&>ol]:list-decimal [&>ol]:ml-3 [&>ol]:text-xs [&>code]:bg-muted [&>code]:px-1 [&>code]:rounded [&>code]:text-[10px] [&>pre]:bg-muted [&>pre]:p-2 [&>pre]:rounded [&>pre]:overflow-x-auto [&>pre]:text-[10px] [&>h1]:text-sm [&>h1]:font-bold [&>h2]:text-xs [&>h2]:font-bold [&>h3]:text-[10px] [&>h3]:font-bold [&>strong]:font-bold [&>em]:italic">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                        </div>
+                      )}
+                      <p className="text-[10px] opacity-70">
+                        {message.timestamp.toLocaleTimeString()}
+                      </p>
+                    </div>
+                    {message.queryResult && (
+                      <div className="w-full mt-1.5">
+                        <QueryResult {...message.queryResult} />
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-lg p-2.5 bg-muted">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span className="text-xs">Thinking...</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {/* Input */}
-          <form onSubmit={handleSubmit} className="flex gap-2 items-end">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about the dataset..."
-              className="min-h-[60px] resize-none flex-1"
-              disabled={isLoading}
-            />
-            <Button
-              variant={queryMode ? "default" : "outline"}
-              size="default"
-              type="button"
-              onClick={() => setQueryMode(!queryMode)}
-              className="h-[60px]"
-              title={queryMode ? "Switch to Chat Mode" : "Switch to Analytics Mode"}
-            >
-              <Database className="h-4 w-4 mr-2" />
-              Analytics
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={isLoading || !input.trim()}
-              className="h-[60px] px-4"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Visualization Panel */}
-      {showVisualization && currentVisualization && (
-        <motion.div
-          initial={{ x: 500, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 500, opacity: 0 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className="flex-shrink-0 w-[500px] h-full"
-        >
-          <Card className="flex flex-col h-full w-full">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 flex-shrink-0">
-              <CardTitle className="text-lg">Visualization & SQL</CardTitle>
+            {/* Input */}
+            <form onSubmit={handleSubmit} className="flex gap-2 items-end flex-shrink-0">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about the dataset..."
+                className="min-h-[50px] max-h-[100px] resize-none flex-1 text-xs"
+                disabled={isLoading}
+              />
               <Button
-                variant="ghost"
+                variant={queryMode ? "default" : "outline"}
                 size="sm"
-                onClick={() => {
-                  setShowVisualization(false)
-                  setCurrentVisualization(null)
-                }}
-                className="h-8 w-8 p-0"
-                title="Close visualization"
+                type="button"
+                onClick={() => setQueryMode(!queryMode)}
+                className="h-[50px] text-xs"
+                title={queryMode ? "Switch to Chat Mode" : "Switch to Analytics Mode"}
               >
-                <X className="h-4 w-4" />
+                <Database className="h-3 w-3 mr-1.5" />
+                Analytics
               </Button>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto min-h-0">
-              <QueryResult {...currentVisualization} />
-            </CardContent>
-          </Card>
-        </motion.div>
+              <Button 
+                type="submit" 
+                disabled={isLoading || !input.trim()}
+                className="h-[50px] px-3 text-xs"
+              >
+                <Send className="h-3 w-3" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

@@ -26,7 +26,7 @@ const eslintConfig = [
       "react/display-name": "off",
       "react/prop-types": "off",
       
-      // Next.js 相关规则
+      
       "@next/next/no-img-element": "off",
       "@next/next/no-html-link-for-pages": "off",
       

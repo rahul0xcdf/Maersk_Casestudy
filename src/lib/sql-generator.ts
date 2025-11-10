@@ -170,9 +170,29 @@ function validateSQL(sql: string): { valid: boolean; error?: string } {
     }
   }
   
-  // Only allow SELECT statements
-  if (!sqlWithoutComments.trim().startsWith('select')) {
+  // Only allow SELECT statements (including CTEs with WITH clause)
+  // Remove any leading whitespace/newlines that might interfere
+  const trimmedSQL = sqlWithoutComments.trim().replace(/^\s+/, '')
+  
+  // Check if it starts with SELECT or WITH (case-insensitive since we already lowercased)
+  // Also handle cases where there might be leading whitespace or special chars
+  const firstWord = trimmedSQL.split(/\s+/)[0] || ''
+  const startsWithSelect = trimmedSQL.startsWith('select') || firstWord === 'select'
+  const startsWithWith = trimmedSQL.startsWith('with') || firstWord === 'with'
+  
+  if (!startsWithSelect && !startsWithWith) {
+    console.error('SQL validation: Query does not start with SELECT or WITH', {
+      firstChars: trimmedSQL.substring(0, 50),
+      firstWord: firstWord,
+      length: trimmedSQL.length,
+      rawFirstChars: trimmedSQL.substring(0, 20).split('').map(c => `${c}(${c.charCodeAt(0)})`).join(' ')
+    })
     return { valid: false, error: 'Only SELECT queries are allowed' }
+  }
+  
+  // Ensure the query eventually contains a SELECT (for WITH clauses)
+  if (startsWithWith && !trimmedSQL.includes('select')) {
+    return { valid: false, error: 'WITH clause must contain a SELECT statement' }
   }
   
   return { valid: true }
@@ -217,7 +237,7 @@ export async function generateSQLFromQuestion(
       }
     }
 
-    const prompt = `You are a SQL expert assistant for a PostgreSQL database containing Brazilian e-commerce data.
+    const prompt = `You are a SQL expert assistant for a PostgreSQL database.
 
 Database Schema:
 ${DATABASE_SCHEMA}
@@ -295,11 +315,19 @@ Only return the JSON object, no additional text.`
       cleanedSQL = cleanedSQL.slice(0, -1).trim()
     }
     
+    // Debug: Log the SQL being validated
+    console.log('Validating SQL:', {
+      firstChars: cleanedSQL.substring(0, 100),
+      startsWith: cleanedSQL.substring(0, 10).toLowerCase(),
+      length: cleanedSQL.length
+    })
+    
     // Validate SQL only if it exists
     const validation = validateSQL(cleanedSQL)
     if (!validation.valid) {
       console.error('SQL validation failed:', validation.error)
-      console.error('Generated SQL:', cleanedSQL)
+      console.error('Generated SQL (first 200 chars):', cleanedSQL.substring(0, 200))
+      console.error('Generated SQL (full):', cleanedSQL)
       throw new Error(validation.error || 'Invalid SQL generated')
     }
     
