@@ -7,6 +7,8 @@ A GenAI-powered analytics platform for exploring the Brazilian E-Commerce Olist 
 
 **🌐 Live Application:** [https://apmollar-casestudy.vercel.app/](https://apmollar-casestudy.vercel.app/)
 
+**📹 Demo Video:** [Watch on YouTube](https://youtu.be/nFOj3s7Kgj4)
+
 **📊 Dataset:** [Kaggle - Brazilian E-Commerce Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce/)
 
 ---
@@ -273,6 +275,14 @@ This project is part of a case study for Maersk AP Mollar.
 **Rahul R**  
 PES University  
 [GitHub](https://github.com/rahul0xcdf/) | [LinkedIn](https://www.linkedin.com/in/rahul0xcdf/)
+
+## 🔮 Future Enhancements
+
+If time permits, the following features are planned for future implementation:
+
+- **New Chat Features**: Enhanced conversational capabilities with improved context understanding
+- **Report Extraction**: Ability to export and extract comprehensive analytics reports
+- **Better Visualization**: Advanced chart types, interactive dashboards, and improved data presentation
 
 ---
 

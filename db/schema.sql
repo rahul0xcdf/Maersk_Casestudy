@@ -71,10 +71,7 @@ CREATE TABLE IF NOT EXISTS olist_order_items (
     created_at TIMESTAMP DEFAULT NOW(),
     PRIMARY KEY (order_id, order_item_id),
     FOREIGN KEY (order_id) REFERENCES olist_orders(order_id) ON DELETE CASCADE
-    -- Removed foreign key constraints on product_id and seller_id to allow data import
-    -- even if some products/sellers don't exist yet
-    -- FOREIGN KEY (product_id) REFERENCES olist_products(product_id),
-    -- FOREIGN KEY (seller_id) REFERENCES olist_sellers(seller_id)
+    
 );
 
 -- Order payments table
