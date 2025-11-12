@@ -206,6 +206,7 @@ export async function generateSQLFromQuestion(
     // Check if this is a greeting or non-analytics question
     const lowerQuestion = question.toLowerCase().trim()
     const isGreeting = /^(hi|hello|hey|greetings|good morning|good afternoon|good evening|howdy)$/i.test(lowerQuestion)
+    const modificationAttempt = /(drop|delete|update|insert|alter|create|truncate|grant|revoke)\b/i.test(lowerQuestion)
     
     // Data-related keywords that indicate this is a data query
     const dataKeywords = [
@@ -227,6 +228,14 @@ export async function generateSQLFromQuestion(
       !hasDataKeywords && 
       !isAskingForData
     
+    if (modificationAttempt) {
+      return {
+        sql: '',
+        explanation: `Oh oh, sorry you can't modify the database. Ha ha! Prompt injection won't work here`,
+        visualizationType: 'table'
+      }
+    }
+
     if (isGreeting || isGeneralQuestion) {
       // Return a conversational response instead of SQL
       return {
