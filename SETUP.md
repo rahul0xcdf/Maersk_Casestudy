@@ -1,15 +1,39 @@
-# Setup Guide for GenAI-Powered Analytics Tool
+# Setup Guide - Brazilian E-Commerce Analytics GenAI Tool
 
-This guide will help you set up the full-stack GenAI-powered analytics tool for the Brazilian E-Commerce Olist dataset.
+> **Case Study Project for Maersk AP Mollar**  
+> Built by **Rahul R** from **PES University**
+
+This comprehensive guide will help you set up the GenAI-powered analytics tool for the Brazilian E-Commerce Olist dataset.
+
+**🌐 Live Application:** [https://apmollar-casestudy.vercel.app/](https://apmollar-casestudy.vercel.app/)  
+**📊 Dataset:** [Kaggle - Brazilian E-Commerce Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce/)
+
+---
 
 ## Prerequisites
 
-- Node.js 18+ and npm
-- Google Cloud Project with Vertex AI API enabled
-- Supabase account (free tier works)
-- Upstash Redis account (free tier works)
+Before starting, ensure you have:
 
-## Step 1: Environment Variables
+- **Node.js 18+** and npm installed
+- **Google AI Studio** account (for Gemini API)
+- **Supabase** account (free tier works)
+- **Upstash Redis** account (free tier works)
+- **Git** (for cloning the repository)
+
+## Step 1: Clone and Install
+
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd Maersk
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+## Step 2: Environment Variables
 
 Create a `.env.local` file in the root directory:
 
@@ -23,82 +47,140 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 GOOGLE_AI_API_KEY=your_google_ai_api_key_here
 # Optional: Specify model name (default: gemini-pro)
 # Available models: gemini-pro, gemini-1.5-pro, gemini-1.5-flash-latest
-# GEMINI_MODEL_NAME=gemini-pro
+GEMINI_MODEL_NAME=gemini-pro
 
 # Upstash Redis Configuration
 UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url_here
 UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token_here
 ```
 
-## Step 2: Google AI Studio Setup
+## Step 3: Google AI Studio Setup
 
-1. Go to [Google AI Studio](https://aistudio.google.com/)
-2. Sign in with your Google account
-3. Create a new API key
-4. Copy your API key and add it to your `.env.local` file as `GOOGLE_AI_API_KEY`
+1. **Visit Google AI Studio:**
+   - Go to [https://aistudio.google.com/](https://aistudio.google.com/)
+   - Sign in with your Google account
 
-## Step 3: Supabase Setup
+2. **Create API Key:**
+   - Click on "Get API Key" or navigate to API Keys section
+   - Create a new API key
+   - Copy the API key
 
-### 3.1 Create Database Schema
+3. **Add to `.env.local`:**
+   ```env
+   GOOGLE_AI_API_KEY=your_api_key_here
+   ```
 
-1. Go to your Supabase project dashboard
-2. Navigate to SQL Editor
-3. Run the SQL from `db/schema.sql` to create all tables
+**Note:** The default model is `gemini-pro`. You can change it by setting `GEMINI_MODEL_NAME` in your `.env.local` file.
 
-### 3.2 Fix Existing Schema (If Tables Already Exist)
+## Step 4: Supabase Setup
 
-If you've already created the tables and are getting foreign key constraint errors:
+### 4.1 Create Supabase Project
 
-1. In the SQL Editor, run the SQL from `db/fix-schema.sql`
-2. This removes problematic foreign key constraints that prevent data import
-3. **Skip this step if you're creating the schema for the first time**
+1. Go to [https://supabase.com](https://supabase.com)
+2. Sign up or log in
+3. Click "New Project"
+4. Fill in project details:
+   - Name: `brazilian-ecommerce` (or your choice)
+   - Database Password: (save this securely)
+   - Region: Choose closest to you
+5. Wait for project to be created (2-3 minutes)
 
-### 3.3 Create RPC Function
+### 4.2 Create Database Schema
 
-1. In the SQL Editor, run the SQL from `db/rpc-function.sql`
-2. This creates the `execute_sql` function that safely executes SQL queries
-3. Optionally, use the specific query functions for better performance
+1. **Navigate to SQL Editor:**
+   - In your Supabase project dashboard
+   - Click on "SQL Editor" in the sidebar
 
-### 3.4 Import Data
+2. **Create Tables:**
+   - Run the SQL from `db/schema.sql` (if available)
+   - Or create tables manually based on the Olist dataset schema
 
-1. Install dependencies: `npm install`
-2. Run the import script:
+3. **Fix Existing Schema (If Needed):**
+   - If you've already created tables and get foreign key errors
+   - Run SQL from `db/fix-schema.sql` to remove problematic constraints
+   - **Skip this if creating schema for the first time**
+
+### 4.3 Create RPC Function
+
+The application uses a custom RPC function to safely execute SQL queries:
+
+1. **In SQL Editor, run the SQL from `db/rpc-function.sql`:**
+   ```sql
+   -- This creates the execute_sql function
+   -- It only allows SELECT queries for security
+   ```
+
+2. **Verify the function:**
+   - Check that `execute_sql` function appears in your database
+   - It should accept a `query_text` parameter and return query results
+
+### 4.4 Import Dataset
+
+1. **Download the Dataset:**
+   - Visit [Kaggle - Brazilian E-Commerce Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce/)
+   - Download all CSV files
+   - Extract to `db/dataset/` directory
+
+2. **Run Import Script:**
    ```bash
    npm run db:import
    ```
-
+   
    This will:
    - Read CSV files from `db/dataset/`
    - Import data into Supabase tables
-   - Handle data type conversions and cleaning
+   - Handle data type conversions
+   - Clean and validate data
 
-   **Note**: The import process may take a while for large datasets. You can monitor progress in the console.
+   **Note:** Import may take 10-30 minutes for large datasets. Monitor progress in console.
 
-### 3.5 Refresh Materialized View
+3. **Refresh Materialized View (If Applicable):**
+   ```sql
+   REFRESH MATERIALIZED VIEW order_summary;
+   ```
 
-After importing data, refresh the materialized view:
+### 4.5 Get Supabase Credentials
 
-```sql
-REFRESH MATERIALIZED VIEW order_summary;
-```
+1. **In Supabase Dashboard:**
+   - Go to "Settings" → "API"
+   - Copy the following:
+     - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+     - **anon/public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+     - **service_role key** → `SUPABASE_SERVICE_ROLE_KEY` (keep this secret!)
 
-## Step 4: Upstash Redis Setup
+2. **Add to `.env.local`:**
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ```
 
-1. **Create a free Redis database:**
-   - Go to [upstash.com](https://upstash.com)
-   - Sign up or log in with your account
+## Step 5: Upstash Redis Setup
+
+Redis is used for caching to improve performance and reduce API costs.
+
+### 5.1 Create Redis Database
+
+1. **Go to Upstash:**
+   - Visit [https://upstash.com](https://upstash.com)
+   - Sign up or log in (free tier available)
+
+2. **Create Database:**
    - Click "Create Database"
-   - Choose "Global" or a specific region
+   - Choose "Global" or specific region
    - Select "Regional" type (free tier)
    - Click "Create"
 
-2. **Get your REST URL and Token:**
-   - After creating the database, click on it to open the details page
-   - Go to the "REST API" tab (or look for "REST API" in the sidebar)
-   - You'll see two values:
-     - **UPSTASH_REDIS_REST_URL**: Looks like `https://your-database-name.upstash.io`
-     - **UPSTASH_REDIS_REST_TOKEN**: A long token string starting with `AX...` or similar
-   - Click the copy icon next to each value to copy them
+### 5.2 Get REST API Credentials
+
+1. **After creating database:**
+   - Click on your database to open details
+   - Navigate to "REST API" tab (or "Details" → "REST API" section)
+   - You'll see:
+     - **UPSTASH_REDIS_REST_URL**: `https://your-database-name.upstash.io`
+     - **UPSTASH_REDIS_REST_TOKEN**: Long token string starting with `AX...`
+
+2. **Copy both values**
 
 3. **Add to `.env.local`:**
    ```env
@@ -106,90 +188,160 @@ REFRESH MATERIALIZED VIEW order_summary;
    UPSTASH_REDIS_REST_TOKEN=your_token_here
    ```
 
-**Alternative method:**
-- If you can't find the REST API tab, look for:
-  - "Details" tab → Scroll down to "REST API" section
-  - Or click "Connect" button → Select "REST API" option
-  - The credentials are also available in the "Settings" tab under "REST API"
-
-## Step 5: Install Dependencies
-
-```bash
-npm install
-```
+**Alternative:** If you can't find REST API tab:
+- Click "Connect" button → Select "REST API"
+- Or go to "Settings" → "REST API"
 
 ## Step 6: Run Development Server
 
-```bash
-npm run dev
-```
+1. **Start the server:**
+   ```bash
+   npm run dev
+   ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+2. **Open in browser:**
+   - Navigate to [http://localhost:3000](http://localhost:3000)
 
-## Step 7: Test the Application
+3. **Verify setup:**
+   - Home page should load
+   - Click "Chat with Datasets"
+   - Try asking a question
 
-### Test Analytics Mode
+## Step 7: Test Features
 
-1. Click on "Analytics Mode" in the chat interface
-2. Try asking questions like:
-   - "Which product category sold the most in Q4 2018?"
-   - "Show average delivery time by state"
-   - "Which sellers have the highest review scores?"
-   - "What's the total revenue by payment method?"
+### Test Chat with Memory
 
-### Test Chat Mode
+1. **Start a conversation:**
+   - Ask: "Show me total number of orders"
+   - Then ask: "And by state"
+   - The AI should remember the previous query
 
-1. Click on "Chat Mode" in the chat interface
-2. Ask general questions about the dataset
+2. **Test follow-ups:**
+   - Ask: "Which product categories perform best?"
+   - Then: "Top 5"
+   - Then: "Show as bar chart"
+
+### Test Visualizations
+
+1. **Ask data questions:**
+   - "Show me revenue trends by month"
+   - "What payment methods are most popular?"
+   - "Top customer locations"
+
+2. **View visualizations:**
+   - Click "Analytics" button on results
+   - Explore different chart types
+
+### Test Caching
+
+1. **Ask a question:**
+   - "What's the total revenue?"
+   - Note the response time
+
+2. **Ask the same question again:**
+   - Should see "Cached" badge
+   - Response should be instant
 
 ## Troubleshooting
 
 ### SQL Execution Errors
 
-If you see errors about the `execute_sql` function:
-1. Make sure you've run the SQL from `db/rpc-function.sql` in Supabase
-2. Check that the function has the correct permissions
-3. Verify your service role key has the necessary permissions
+**Error: "function execute_sql does not exist"**
+
+1. Make sure you've run `db/rpc-function.sql` in Supabase SQL Editor
+2. Verify the function appears in your database
+3. Check that service role key has correct permissions
+
+**Error: "permission denied"**
+
+1. Verify `SUPABASE_SERVICE_ROLE_KEY` is set correctly
+2. Check that the key has not expired
+3. Ensure RPC function has proper security settings
 
 ### Data Import Errors
 
-If data import fails:
-1. Check that all CSV files are in `db/dataset/`
-2. Verify your Supabase connection settings
-3. Check the console for specific error messages
-4. Make sure the schema has been created first
+**Error: "table does not exist"**
+
+1. Create database schema first (Step 4.2)
+2. Verify all tables are created
+3. Check table names match CSV file names
+
+**Error: "foreign key constraint"**
+
+1. Run `db/fix-schema.sql` to remove problematic constraints
+2. Or import tables in correct order
+3. Disable foreign key checks temporarily
+
+**Import is slow:**
+
+- This is normal for large datasets (100K+ rows)
+- Monitor progress in console
+- Consider importing in batches
 
 ### Gemini API Errors
 
-If you see Gemini API errors:
-
 **Error: "models/gemini-1.5-flash is not found"**
-- This means you're using the wrong model name
-- **Solution:** The code now defaults to `gemini-pro` which works with Google AI Studio
-- You can also set `GEMINI_MODEL_NAME=gemini-pro` in your `.env.local`
+
+- Solution: Use `gemini-pro` (default) or set `GEMINI_MODEL_NAME=gemini-pro`
 - Available models: `gemini-pro`, `gemini-1.5-pro`, `gemini-1.5-flash-latest`
 
-**Other Gemini API errors:**
-1. Verify your Google AI Studio API key is set correctly
-2. Check that the API key is valid and not expired
-3. Verify your `GOOGLE_AI_API_KEY` environment variable is set
-4. Make sure you're using the correct API key from Google AI Studio
-5. Try using `gemini-pro` model (default) if other models don't work
-6. Check the [GEMINI_MODELS.md](./GEMINI_MODELS.md) file for model information
+**Error: "API key invalid"**
+
+1. Verify `GOOGLE_AI_API_KEY` is set correctly
+2. Check API key is not expired
+3. Ensure you're using Google AI Studio API key (not Vertex AI)
+
+**Error: "quota exceeded"**
+
+1. Check your Google AI Studio quota
+2. Free tier has rate limits
+3. Wait a few minutes and try again
 
 ### Redis Cache Errors
 
-If Redis caching fails:
-1. Check your Upstash Redis credentials
-2. Verify the REST URL and token are correct
-3. The application will still work without Redis, but responses won't be cached
+**Error: "Redis connection failed"**
+
+1. Verify `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
+2. Check Redis database is active in Upstash dashboard
+3. Application will work without Redis, but without caching
+
+**Cache not working:**
+
+- Check Redis credentials are correct
+- Verify Redis database is accessible
+- Check browser console for errors
+
+### General Issues
+
+**Port 3000 already in use:**
+
+```bash
+# Kill process on port 3000
+npx kill-port 3000
+# Or use different port
+PORT=3001 npm run dev
+```
+
+**Module not found errors:**
+
+```bash
+# Clear cache and reinstall
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Environment variables not loading:**
+
+1. Ensure `.env.local` is in project root
+2. Restart development server after changing `.env.local`
+3. Check for typos in variable names
 
 ## Database Schema Overview
 
-The database includes the following tables:
+The database includes:
 
 - `olist_customers` - Customer information
-- `olist_sellers` - Seller information
+- `olist_sellers` - Seller information  
 - `olist_products` - Product details
 - `olist_orders` - Order information
 - `olist_order_items` - Order items
@@ -197,34 +349,97 @@ The database includes the following tables:
 - `olist_order_reviews` - Customer reviews
 - `olist_geolocation` - Geographic data
 - `product_category_translation` - Product category translations
-- `order_summary` - Materialized view for common analytics queries
+- `order_summary` - Materialized view for analytics
 
 ## Security Notes
 
-- The `execute_sql` RPC function only allows SELECT queries
-- SQL injection attempts are blocked
-- All queries are validated before execution
-- Cache keys are hashed for security
+- **RPC Function Security:**
+  - `execute_sql` only allows SELECT queries
+  - SQL injection attempts are blocked
+  - All queries are validated before execution
+
+- **API Keys:**
+  - Never commit `.env.local` to git
+  - Keep service role keys secret
+  - Rotate keys if exposed
+
+- **Database:**
+  - Use RLS (Row Level Security) for production
+  - Limit service role key usage
+  - Monitor query logs
 
 ## Performance Tips
 
-1. Use the materialized view `order_summary` for common queries
-2. Redis caching reduces API calls and speeds up responses
-3. The Gemini model uses `gemini-1.5-flash` for faster responses
-4. Queries are limited to 100 rows by default
+1. **Use Materialized Views:**
+   - `order_summary` view for common queries
+   - Refresh periodically: `REFRESH MATERIALIZED VIEW order_summary;`
+
+2. **Redis Caching:**
+   - Reduces API calls significantly
+   - 1-hour TTL balances freshness and performance
+   - Clear cache when needed via UI button
+
+3. **Query Optimization:**
+   - Gemini generates optimized SQL
+   - Complex queries may take longer
+   - Use LIMIT for large result sets
+
+4. **Model Selection:**
+   - `gemini-pro`: Balanced speed and quality
+   - `gemini-1.5-flash`: Faster, good for simple queries
+   - `gemini-1.5-pro`: Best quality, slower
 
 ## Next Steps
 
-- Customize the visualization types
-- Add more specific query functions in Supabase
-- Implement user authentication
-- Add more chart types (maps, heatmaps, etc.)
-- Set up monitoring and logging
+After setup:
+
+1. **Test all features:**
+   - Chat with memory
+   - Visualizations
+   - Caching
+   - Follow-up questions
+
+2. **Explore the dataset:**
+   - Try different query types
+   - Test various visualizations
+   - Experiment with conversation flow
+
+3. **Customize:**
+   - Adjust chart types
+   - Modify prompts
+   - Add new features
 
 ## Support
 
-If you encounter any issues, check:
-1. The browser console for client-side errors
-2. The server logs for backend errors
-3. Supabase logs for database errors
-4. Google Cloud logs for Vertex AI errors
+If you encounter issues:
+
+1. **Check logs:**
+   - Browser console (F12)
+   - Terminal/Server logs
+   - Supabase logs
+
+2. **Verify setup:**
+   - All environment variables set
+   - Database schema created
+   - RPC function exists
+   - Redis accessible
+
+3. **Test components:**
+   - Test each service individually
+   - Verify API keys work
+   - Check database connectivity
+
+## Resources
+
+- **Live Application:** [https://apmollar-casestudy.vercel.app/](https://apmollar-casestudy.vercel.app/)
+- **Dataset:** [Kaggle - Brazilian E-Commerce](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce/)
+- **Documentation:**
+  - [Next.js Docs](https://nextjs.org/docs)
+  - [Supabase Docs](https://supabase.com/docs)
+  - [Google AI Studio](https://aistudio.google.com/)
+  - [Upstash Redis](https://docs.upstash.com/)
+
+---
+
+**Case Study Project for Maersk AP Mollar**  
+**Built by Rahul R - PES University**
