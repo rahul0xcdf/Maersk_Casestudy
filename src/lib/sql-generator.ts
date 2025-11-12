@@ -199,7 +199,8 @@ function validateSQL(sql: string): { valid: boolean; error?: string } {
 }
 
 export async function generateSQLFromQuestion(
-  question: string
+  question: string,
+  context?: string
 ): Promise<SQLGenerationResult> {
   try {
     // Check if this is a greeting or non-analytics question
@@ -241,6 +242,8 @@ export async function generateSQLFromQuestion(
 
 Database Schema:
 ${DATABASE_SCHEMA}
+
+${context && context.trim() !== '' ? `Conversation context (previous messages):\n${context}\n` : ''}
 
 User Question: "${question}"
 

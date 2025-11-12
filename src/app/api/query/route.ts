@@ -24,10 +24,12 @@ function generateCacheKey(question: string): string {
 
 export async function POST(request: NextRequest) {
   let question: string = ''
+  let history: any[] = []
   
   try {
     const body = await request.json()
     question = body.question
+    history = Array.isArray(body.history) ? body.history : []
 
     if (!question || typeof question !== 'string') {
       return NextResponse.json(
@@ -54,8 +56,20 @@ export async function POST(request: NextRequest) {
 
     const startTime = Date.now()
 
-    // Generate SQL from question using Gemini
-    const sqlResult = await generateSQLFromQuestion(question)
+    // Build conversation context from recent history (if provided)
+    let context = ''
+    if (Array.isArray(history) && history.length > 0) {
+      context = history
+        .slice(-10)
+        .map((m: any) => {
+          const role = m.role === 'assistant' ? 'Assistant' : 'User'
+          return `${role}: ${String(m.content || '').trim()}`
+        })
+        .join('\n')
+    }
+
+    // Generate SQL from question using Gemini with optional conversation context
+    const sqlResult = await generateSQLFromQuestion(question, context)
 
     // If no SQL was generated (conversational response), return it directly
     if (!sqlResult.sql || sqlResult.sql.trim() === '') {

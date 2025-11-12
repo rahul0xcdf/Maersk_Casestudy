@@ -12,7 +12,7 @@ function generateQueryCacheKey(question: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { question, includeData } = await request.json();
+    const { question, includeData, history } = await request.json();
 
     if (!question || typeof question !== 'string') {
       return NextResponse.json(
@@ -167,7 +167,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate response using Gemini
+    // Build conversation context from recent history (if provided)
+    if (Array.isArray(history) && history.length > 0) {
+      const historyText = history
+        .slice(-10)
+        .map((m: any) => {
+          const role = m.role === 'assistant' ? 'Assistant' : 'User'
+          return `${role}: ${String(m.content || '').trim()}`
+        })
+        .join('\n')
+      context = context
+        ? `${historyText}\n\n${context}`
+        : historyText
+    }
+
+    // Generate response using Gemini with context from history/data
     const response = await generateChatResponse(question, context);
 
     // Cache the response for 1 hour (3600 seconds)

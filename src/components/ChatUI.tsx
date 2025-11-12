@@ -348,6 +348,10 @@ export function ChatUI({ className = '' }: ChatUIProps) {
         },
         body: JSON.stringify({
           question: userInput,
+          // Send compact recent history to enable follow-ups
+          history: [...messages, { role: 'user', content: userInput, timestamp: new Date() }]
+            .slice(-10)
+            .map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
