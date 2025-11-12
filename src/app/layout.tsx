@@ -14,17 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Olist E-Commerce Analytics Dashboard",
-  description: "GenAI-powered chat assistant and dashboard for Brazilian E-Commerce Public Dataset by Olist. Built with Next.js, TypeScript, and Google Gemini.",
+  title: "Olist Analytics Dashboard",
+  description: "GenAI-powered chat assistant and dashboard for Brazilian E-Commerce Public Dataset by Olist. Built By Rahul R",
   keywords: ["Olist", "E-Commerce", "Dashboard", "Analytics", "AI", "Chat", "Brazil", "Next.js", "TypeScript", "Gemini"],
-  authors: [{ name: "Data Analytics Team" }],
+  authors: [{ name: "Rahul R" }],
   icons: {
     icon: "/favicon.ico",
   },
   openGraph: {
     title: "Olist E-Commerce Analytics Dashboard",
     description: "GenAI-powered analytics dashboard for Brazilian E-Commerce data",
-    url: "https://your-domain.com",
+    url: "https://apmollar-casestudy.vercel.app/",
     siteName: "Olist Analytics",
     type: "website",
   },
