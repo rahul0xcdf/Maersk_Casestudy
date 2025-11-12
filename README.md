@@ -1,6 +1,6 @@
 # Brazilian E-Commerce Analytics - GenAI Case Study
 
-> **Case Study Project for Maersk AP Mollar**  
+> **Case Study Project for Maersk AP Moller**  
 > Built by **Rahul R** from **PES University**
 
 A GenAI-powered analytics platform for exploring the Brazilian E-Commerce Olist dataset. This project demonstrates advanced AI capabilities including natural language SQL generation, conversational chat with memory, and intelligent data visualizations.
