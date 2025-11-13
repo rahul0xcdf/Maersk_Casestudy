@@ -13,38 +13,18 @@ A GenAI-powered analytics platform for exploring the Brazilian E-Commerce Olist 
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 This is a comprehensive GenAI case study that transforms natural language questions into SQL queries, executes them on a real database, and presents results through interactive visualizations. The system features continuous conversation memory, intelligent caching, and a seamless user experience.
 
-## ✨ Key Features
+## Tech Stack
 
-### 🤖 **Intelligent Chat with Memory**
-- **Conversational Continuity**: The AI remembers previous queries and context throughout the conversation
-- **Context-Aware Responses**: Follow-up questions like "and by state" or "top 5" work seamlessly
-- **Dual Mode Operation**: 
-  - **Chat Mode**: General questions about the dataset
-  - **Query Mode**: Data analytics with SQL generation and visualizations
-
-### 📊 **Advanced Visualizations**
-- **Multiple Chart Types**: Bar charts, line charts, pie charts, tables, and metrics
-- **Auto-Detection**: Automatically selects the best visualization type based on data
-- **Interactive Analytics**: Click on any result to view detailed visualizations
-- **Real-time Data**: Direct queries to Supabase PostgreSQL database
-
-### ⚡ **Performance & Caching**
-- **Redis Caching**: Fast response times with intelligent caching (1-hour TTL)
-- **Query Optimization**: Efficient SQL generation and execution
-- **Responsive Design**: Mobile-first, optimized for all devices
-- **Instant Results**: Cached responses load instantly for repeated queries
-
-### 🔄 **Conversational Features**
-- **Chat Memory**: Maintains conversation history for context-aware responses
-- **Follow-up Questions**: Natural follow-ups like "show me top 5" or "compare to last year"
-- **Smart Context**: AI understands references to previous queries and results
-- **Visualization Analysis**: Ask questions about displayed charts and data
-
-## 🛠️ Tech Stack
+| Area       | Technologies |
+|-----------|--------------|
+| Frontend  | Next.js 15 (App Router), TypeScript, Tailwind CSS, shadcn/ui, Framer Motion, Recharts |
+| Backend   | Next.js API Routes, Supabase (PostgreSQL + RPC), Google Gemini AI |
+| Caching   | Upstash Redis (REST) |
+| Deploy    | Vercel |
 
 ### Frontend
 - **Next.js 15** (App Router) - React framework with server-side rendering
@@ -64,7 +44,7 @@ This is a comprehensive GenAI case study that transforms natural language questi
 - **Vercel** - Serverless deployment platform
 - **Environment Variables** - Secure configuration management
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+ and npm
@@ -120,7 +100,7 @@ This is a comprehensive GenAI case study that transforms natural language questi
 
 For detailed setup instructions, see [SETUP.md](./SETUP.md).
 
-## 🧭 Architecture
+## Architecture
 
 User → asks question → Gemini AI → generates SQL → Supabase RPC → safely executes it → API → formats data + adds metadata → Redis Cache → stores response → Frontend → displays visualization
 
@@ -129,21 +109,21 @@ User → asks question → Gemini AI → generates SQL → Supabase RPC → safe
   <img src="./public/architecture.png" alt="Application Architecture" style="width: 1400px; max-width: 100%; height: auto;" />
 </div>
 
-## 📋 Features in Detail
+## Features in Detail
 
-### 1. Natural Language to SQL
+### 1. Natural language to SQL
 - Ask questions in plain English
 - AI generates optimized PostgreSQL queries
 - Automatic query validation and safety checks
 - Support for complex aggregations, joins, and filters
 
-### 2. Chat Memory & Context
+### 2. Chat memory and context
 - **Conversation History**: Last 10 messages maintained in context
 - **Context-Aware SQL**: Follow-up queries reference previous results
 - **Smart References**: Understands "top category", "those results", etc.
 - **Seamless Continuation**: Natural conversation flow without repetition
 
-### 3. Intelligent Visualizations
+### 3. Intelligent visualizations
 - **Auto-Detection**: Chooses chart type based on data structure
 - **Multiple Formats**: 
   - Bar charts for categorical comparisons
@@ -154,7 +134,7 @@ User → asks question → Gemini AI → generates SQL → Supabase RPC → safe
 - **Interactive Analysis**: Click to view full visualizations
 - **Chart Insights**: Ask questions about displayed charts
 
-### 4. Performance Optimization
+### 4. Performance optimization
 - **Redis Caching**: 
   - 1-hour TTL for query results
   - Instant responses for repeated questions
@@ -163,7 +143,7 @@ User → asks question → Gemini AI → generates SQL → Supabase RPC → safe
 - **Lazy Loading**: Components load on demand
 - **Responsive Design**: Fast on all devices
 
-## 🎨 User Experience
+## User experience
 
 ### Chat Interface
 - Clean, modern chat UI
@@ -177,7 +157,7 @@ User → asks question → Gemini AI → generates SQL → Supabase RPC → safe
 - SQL query display
 - Export capabilities
 
-## 📊 Dataset Information
+## Dataset information
 
 The Brazilian E-Commerce Olist Dataset contains:
 - **100K+ Orders** from 2016-2018
@@ -187,7 +167,7 @@ The Brazilian E-Commerce Olist Dataset contains:
 
 **Dataset Source:** [Kaggle - Brazilian E-Commerce Dataset](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce/)
 
-## 🏗️ Project Structure
+## Project structure
 
 ```
 src/
@@ -211,7 +191,7 @@ src/
     └── redis.ts           # Caching utilities
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Google AI Studio Setup
 1. Visit [Google AI Studio](https://aistudio.google.com/)
@@ -231,7 +211,7 @@ src/
 
 See [SETUP.md](./SETUP.md) for detailed instructions.
 
-## 🚀 Deployment
+## Deployment
 
 ### Vercel Deployment
 1. Push code to GitHub
@@ -241,27 +221,27 @@ See [SETUP.md](./SETUP.md) for detailed instructions.
 
 The application is live at: [https://apmollar-casestudy.vercel.app/](https://apmollar-casestudy.vercel.app/)
 
-## 📝 Example Queries
+## Example queries
 
-### Analytics Queries
+### Analytics queries
 - "Show me revenue trends by month"
 - "Which product categories perform best?"
 - "What payment methods are most popular?"
 - "Top 5 customer locations by order count"
 - "Average delivery time by state"
 
-### Follow-up Queries (with memory)
+### Follow-up queries (with memory)
 - "And by state" (after asking about revenue)
 - "Top 5" (after any list query)
 - "Compare to last year" (after time-based query)
 - "Show as bar chart" (after data query)
 
-### Chat Queries
+### Chat queries
 - "What is this dataset about?"
 - "How can I analyze product categories?"
 - "Explain the payment methods"
 
-## 🎓 Case Study Highlights
+## Case study highlights
 
 This project demonstrates:
 - **GenAI Integration**: Natural language to SQL conversion
@@ -271,15 +251,15 @@ This project demonstrates:
 - **Full-Stack Development**: Modern Next.js architecture
 - **Database Design**: Efficient PostgreSQL schema and queries
 
-## 🤝 Contributing
+## Contributing
 
 This is a case study project. For questions or feedback, please reach out.
 
-## 📄 License
+## License
 
 This project is part of a case study for Maersk AP Mollar.
 
-## 👤 Author
+## Author
 
 **Rahul R**  
 PES University  
