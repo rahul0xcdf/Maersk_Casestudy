@@ -120,6 +120,15 @@ This is a comprehensive GenAI case study that transforms natural language questi
 
 For detailed setup instructions, see [SETUP.md](./SETUP.md).
 
+## 🧭 Architecture
+
+User → asks question → Gemini AI → generates SQL → Supabase RPC → safely executes it → API → formats data + adds metadata → Redis Cache → stores response → Frontend → displays visualization
+
+<div style="overflow-x: auto; padding: 8px; border: 1px solid #e5e7eb; border-radius: 6px;">
+  <!-- Adjust the width below to control initial render size; it will remain responsive and scrollable -->
+  <img src="./public/architecture.png" alt="Application Architecture" style="width: 1400px; max-width: 100%; height: auto;" />
+</div>
+
 ## 📋 Features in Detail
 
 ### 1. Natural Language to SQL
